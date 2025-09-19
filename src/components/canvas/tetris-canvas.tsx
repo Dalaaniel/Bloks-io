@@ -8,33 +8,28 @@ import { getBlockById, type TetrisBlock } from '@/lib/blocks';
 export interface TetrisCanvasApi {
   addBlock: (blockId: string, x: number, y: number) => void;
   setZoom: (zoom: number) => void;
+  getZoom: () => number;
 }
 
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Matter.Engine>();
   const renderRef = useRef<Matter.Render>();
-  const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 0 });
+  const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 3000 });
   const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
   const zoomRef = useRef(1);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const height = window.innerHeight * 3; // Make canvas taller
-      setCanvasSize({ width: 3000, height });
-
-      // Generate stars
-      const newStars = [];
-      for (let i = 0; i < 400; i++) { // More stars for bigger canvas
-        newStars.push({
-          x: Math.random() * 3000,
-          y: Math.random() * height,
-          radius: Math.random() * 1.5,
-        });
-      }
-      setStars(newStars);
+    const newStars = [];
+    for (let i = 0; i < 400; i++) {
+      newStars.push({
+        x: Math.random() * canvasSize.width,
+        y: Math.random() * canvasSize.height,
+        radius: Math.random() * 1.5,
+      });
     }
-  }, []);
+    setStars(newStars);
+  }, [canvasSize.width, canvasSize.height]);
 
   useImperativeHandle(ref, () => ({
     addBlock: (blockId, x, y) => {
@@ -42,13 +37,11 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         const engine = engineRef.current;
         if (!blockData || !engine) return;
 
-        const scale = 2; // Keep internal scaling consistent
-        const translatedX = x * zoomRef.current;
-        const translatedY = y * zoomRef.current;
+        const scale = 2;
 
         const blockParts = blockData.parts.map(part => {
-            const vertices = part.map(p => ({ x: p.x, y: p.y }));
-            return Matter.Bodies.fromVertices(translatedX, translatedY, [vertices], {
+            const vertices = part.map(p => ({ x: p.x * scale, y: p.y * scale }));
+            return Matter.Bodies.fromVertices(x, y, [vertices], {
                 render: {
                     fillStyle: blockData.color,
                     strokeStyle: 'rgba(0,0,0,0.2)',
@@ -68,17 +61,17 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     setZoom: (zoom) => {
         zoomRef.current = zoom;
         const render = renderRef.current;
-        if (!render) return;
-
-        Matter.Render.lookAt(render, {
-            min: { x: 0, y: 0 },
-            max: { x: canvasSize.width / zoomRef.current, y: canvasSize.height / zoomRef.current }
-        });
-    }
+        const scene = sceneRef.current;
+        if (!render || !scene) return;
+        
+        scene.style.transform = `scale(${zoom})`;
+        scene.style.transformOrigin = '0 0';
+    },
+    getZoom: () => zoomRef.current,
   }));
 
   useEffect(() => {
-    if (!sceneRef.current || canvasSize.height === 0) return;
+    if (!sceneRef.current) return;
 
     const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events } = Matter;
 
@@ -86,9 +79,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     engineRef.current = engine;
     const world = engine.world;
     
-    const renderWidth = canvasSize.width;
-    const renderHeight = canvasSize.height;
-
     const render = Render.create({
       element: sceneRef.current,
       engine: engine,
@@ -101,17 +91,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     });
     renderRef.current = render;
     
-    Render.lookAt(render, {
-        min: { x: 0, y: 0 },
-        max: { x: renderWidth, y: renderHeight }
-    });
-
     // Ground
-    World.add(world, Bodies.rectangle(renderWidth / 2, renderHeight - 60, renderWidth, 120, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
+    World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height - 30, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
     // Left Wall
-    World.add(world, Bodies.rectangle(-60, renderHeight / 2, 120, renderHeight, { isStatic: true, render: { visible: false } }));
+    World.add(world, Bodies.rectangle(-30, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
     // Right Wall
-    World.add(world, Bodies.rectangle(renderWidth + 60, renderHeight / 2, 120, renderHeight, { isStatic: true, render: { visible: false } }));
+    World.add(world, Bodies.rectangle(canvasSize.width + 30, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
 
     const mouse = Mouse.create(render.canvas);
     
@@ -131,8 +116,30 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     Render.run(render);
     const runner = Runner.create();
     Runner.run(runner, engine);
+    
+    // Adjust mouse scale
+    Mouse.setZoom = (mouse, zoom) => {
+        mouse.scale.x = 1 / zoom;
+        mouse.scale.y = 1 / zoom;
+    };
+    Mouse.setZoom(mouse, zoomRef.current);
+
+    const handleZoom = () => {
+        if(renderRef.current) {
+            Mouse.setZoom(mouse, zoomRef.current);
+        }
+    };
+    
+    const slider = document.querySelector('.h-full');
+    if (slider) {
+      slider.addEventListener('input', handleZoom);
+    }
+
 
     return () => {
+      if (slider) {
+        slider.removeEventListener('input', handleZoom);
+      }
       Render.stop(render);
       Runner.stop(runner);
       World.clear(world, false);
@@ -140,7 +147,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       if(render.canvas) render.canvas.remove();
       if(render.textures) render.textures = {};
     };
-  }, [canvasSize.height]);
+  }, [canvasSize.width, canvasSize.height]);
 
   return (
     <div

@@ -21,8 +21,9 @@ export default function Home() {
     if (useBlock(blockId)) {
       if (tetrisCanvasApiRef.current && scrollContainerRef.current) {
         const scrollRect = scrollContainerRef.current.getBoundingClientRect();
-        const x = event.clientX - scrollRect.left + scrollContainerRef.current.scrollLeft;
-        const y = event.clientY - scrollRect.top;
+        const zoom = tetrisCanvasApiRef.current.getZoom();
+        const x = (event.clientX - scrollRect.left + scrollContainerRef.current.scrollLeft) / zoom;
+        const y = (event.clientY - scrollRect.top) / zoom;
         tetrisCanvasApiRef.current.addBlock(blockId, x, y);
       }
     } else {
