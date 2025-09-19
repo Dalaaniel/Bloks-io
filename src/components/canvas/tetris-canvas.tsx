@@ -13,10 +13,23 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Matter.Engine>();
   const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 0 });
+  const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setCanvasSize(prev => ({ ...prev, height: window.innerHeight - 64 })); // 64px for header
+      const height = window.innerHeight - 64; // 64px for header
+      setCanvasSize({ width: 3000, height });
+
+      // Generate stars
+      const newStars = [];
+      for (let i = 0; i < 200; i++) {
+        newStars.push({
+          x: Math.random() * 3000,
+          y: Math.random() * height,
+          radius: Math.random() * 1.5,
+        });
+      }
+      setStars(newStars);
     }
   }, []);
 
@@ -53,23 +66,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         width: canvasSize.width,
         height: canvasSize.height,
         wireframes: false,
-        background: '#0a0a0a', // Dark background for starry night
+        background: 'transparent',
       },
     });
-
-    // Add stars
-    for (let i = 0; i < 100; i++) {
-        const x = Math.random() * canvasSize.width;
-        const y = Math.random() * canvasSize.height;
-        const radius = Math.random() * 1.5;
-        const star = Bodies.circle(x, y, radius, {
-            isStatic: true,
-            render: {
-                fillStyle: 'white'
-            }
-        });
-        World.add(world, star);
-    }
 
     // Ground
     World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
@@ -80,8 +79,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     const mouseConstraint = MouseConstraint.create(engine, {
       mouse: mouse,
       constraint: {
-        stiffness: 0.1,
-        damping: 0.1,
+        stiffness: 0.2,
         render: {
           visible: false,
         },
@@ -115,18 +113,17 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
             render.options.width = newWidth;
             
             // Add more stars in the new area
-            for (let i = 0; i < 50; i++) {
-                const x = prevSize.width + Math.random() * 1000;
-                const y = Math.random() * prevSize.height;
-                const radius = Math.random() * 1.5;
-                const star = Bodies.circle(x, y, radius, {
-                    isStatic: true,
-                    render: {
-                        fillStyle: 'white'
-                    }
-                });
-                World.add(world, star);
-            }
+            setStars(currentStars => {
+              const newStars = [...currentStars];
+              for (let i = 0; i < 100; i++) {
+                  newStars.push({
+                      x: prevSize.width + Math.random() * 1000,
+                      y: Math.random() * prevSize.height,
+                      radius: Math.random() * 1.5
+                  });
+              }
+              return newStars;
+            });
             
             return { ...prevSize, width: newWidth };
         });
@@ -150,7 +147,32 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     };
   }, [canvasSize.height]);
 
-  return <div ref={sceneRef} style={{ width: canvasSize.width, height: canvasSize.height }} />;
+  return (
+    <div
+      ref={sceneRef}
+      style={{
+        width: canvasSize.width,
+        height: canvasSize.height,
+        background: '#0a0a0a',
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+            {stars.map((star, i) => (
+                <div key={i} style={{
+                    position: 'absolute',
+                    left: star.x,
+                    top: star.y,
+                    width: star.radius * 2,
+                    height: star.radius * 2,
+                    backgroundColor: 'white',
+                    borderRadius: '50%',
+                }} />
+            ))}
+        </div>
+    </div>
+  );
 });
 
 TetrisCanvas.displayName = 'TetrisCanvas';
