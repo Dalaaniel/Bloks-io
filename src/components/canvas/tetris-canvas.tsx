@@ -3,7 +3,7 @@
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import Matter from 'matter-js';
-import { getBlockById } from '@/lib/blocks';
+import { getBlockById, type TetrisBlock } from '@/lib/blocks';
 
 export interface TetrisCanvasApi {
   addBlock: (blockId: string, x: number, y: number) => void;
@@ -12,6 +12,7 @@ export interface TetrisCanvasApi {
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Matter.Engine>();
+  const renderRef = useRef<Matter.Render>();
   const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 0 });
   const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
 
@@ -39,13 +40,25 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       const engine = engineRef.current;
       if (!blockData || !engine) return;
 
-      const newBlock = Matter.Bodies.fromVertices(x, y, [blockData.vertices], {
-        render: {
-          fillStyle: blockData.color,
-          strokeStyle: 'rgba(0,0,0,0.2)',
-          lineWidth: 2,
-        },
+      const scale = 2; // Keep this consistent with render scale
+      const translatedX = x * scale;
+      const translatedY = y * scale;
+      
+      const newBlock = Matter.Body.create({
+        parts: blockData.parts.map(part => Matter.Bodies.fromVertices(translatedX, translatedY, [part], {
+             render: {
+                fillStyle: blockData.color,
+                strokeStyle: 'rgba(0,0,0,0.2)',
+                lineWidth: 2,
+            }
+        })),
+         render: {
+            fillStyle: blockData.color,
+            strokeStyle: 'rgba(0,0,0,0.2)',
+            lineWidth: 2,
+        }
       });
+      
       Matter.World.add(engine.world, newBlock);
     },
   }));
@@ -58,6 +71,10 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     const engine = Engine.create({ gravity: { y: 0.4 } });
     engineRef.current = engine;
     const world = engine.world;
+    
+    const scale = 2;
+    const renderWidth = canvasSize.width * scale;
+    const renderHeight = canvasSize.height * scale;
 
     const render = Render.create({
       element: sceneRef.current,
@@ -69,13 +86,22 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         background: 'transparent',
       },
     });
+    renderRef.current = render;
+    
+    Render.lookAt(render, {
+        min: { x: 0, y: 0 },
+        max: { x: renderWidth, y: renderHeight }
+    });
 
     // Ground
-    World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
+    World.add(world, Bodies.rectangle(renderWidth / 2, renderHeight, renderWidth, 120, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
     // Left Wall
-    World.add(world, Bodies.rectangle(0, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
+    World.add(world, Bodies.rectangle(0, renderHeight / 2, 120, renderHeight, { isStatic: true, render: { visible: false } }));
 
     const mouse = Mouse.create(render.canvas);
+    mouse.scale.x = scale;
+    mouse.scale.y = scale;
+    
     const mouseConstraint = MouseConstraint.create(engine, {
       mouse: mouse,
       constraint: {
@@ -90,44 +116,44 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     render.mouse = mouse;
 
     const autoExtendCanvas = () => {
-      const rightmostPoint = world.bodies.reduce((max, body) => {
-        if (body.isStatic) return max;
-        return Math.max(max, body.bounds.max.x);
-      }, 0);
-
-      if (rightmostPoint > canvasSize.width - 500) {
-        setCanvasSize(prevSize => {
-            const newWidth = prevSize.width + 1000;
+        const rightmostPoint = world.bodies.reduce((max, body) => {
+            if (body.isStatic) return max;
+            return Math.max(max, body.bounds.max.x);
+        }, 0);
+    
+        if (rightmostPoint > render.bounds.max.x - 1000) {
+            const newWidth = render.bounds.max.x + 2000;
+            const newRenderWidth = newWidth;
+    
             // Extend ground
-            const ground = world.bodies.find(body => body.isStatic && body.position.y >= prevSize.height);
+            const ground = world.bodies.find(body => body.isStatic && body.position.y >= render.bounds.max.y - 60);
             if(ground) {
-                Matter.Body.setPosition(ground, {x: newWidth / 2, y: ground.position.y});
+                Matter.Body.setPosition(ground, {x: newRenderWidth / 2, y: ground.position.y});
                 Matter.Body.setVertices(ground, [
-                    { x: 0, y: prevSize.height - 30 },
-                    { x: newWidth, y: prevSize.height - 30 },
-                    { x: newWidth, y: prevSize.height + 30 },
-                    { x: 0, y: prevSize.height + 30 },
+                    { x: 0, y: render.bounds.max.y - 60 },
+                    { x: newRenderWidth, y: render.bounds.max.y - 60 },
+                    { x: newRenderWidth, y: render.bounds.max.y + 60 },
+                    { x: 0, y: render.bounds.max.y + 60 },
                 ]);
             }
-            render.bounds.max.x = newWidth;
-            render.options.width = newWidth;
             
+            render.bounds.max.x = newRenderWidth;
+            
+            setCanvasSize(prev => ({...prev, width: prev.width + 2000 / scale}));
+
             // Add more stars in the new area
             setStars(currentStars => {
               const newStars = [...currentStars];
               for (let i = 0; i < 100; i++) {
                   newStars.push({
-                      x: prevSize.width + Math.random() * 1000,
-                      y: Math.random() * prevSize.height,
+                      x: (render.bounds.max.x - 2000) / scale + Math.random() * (2000 / scale),
+                      y: Math.random() * (render.bounds.max.y / scale),
                       radius: Math.random() * 1.5
                   });
               }
               return newStars;
             });
-            
-            return { ...prevSize, width: newWidth };
-        });
-      }
+        }
     };
     
     Events.on(engine, 'afterUpdate', autoExtendCanvas);
@@ -149,28 +175,31 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
   return (
     <div
-      ref={sceneRef}
       style={{
         width: canvasSize.width,
         height: canvasSize.height,
-        background: '#0a0a0a',
-        overflow: 'hidden',
         position: 'relative',
+        overflow: 'hidden',
+        background: '#0a0a0a',
       }}
     >
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-            {stars.map((star, i) => (
-                <div key={i} style={{
-                    position: 'absolute',
-                    left: star.x,
-                    top: star.y,
-                    width: star.radius * 2,
-                    height: star.radius * 2,
-                    backgroundColor: 'white',
-                    borderRadius: '50%',
-                }} />
-            ))}
-        </div>
+      <div 
+        ref={sceneRef}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+      />
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+        {stars.map((star, i) => (
+          <div key={i} style={{
+              position: 'absolute',
+              left: star.x,
+              top: star.y,
+              width: star.radius * 2,
+              height: star.radius * 2,
+              backgroundColor: 'white',
+              borderRadius: '50%',
+          }} />
+        ))}
+      </div>
     </div>
   );
 });
