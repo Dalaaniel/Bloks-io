@@ -7,6 +7,7 @@ import { getBlockById, type TetrisBlock } from '@/lib/blocks';
 
 export interface TetrisCanvasApi {
   addBlock: (blockId: string, x: number, y: number) => void;
+  setZoom: (zoom: number) => void;
 }
 
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
@@ -15,15 +16,16 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const renderRef = useRef<Matter.Render>();
   const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 0 });
   const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
+  const zoomRef = useRef(1);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const height = window.innerHeight - 64; // 64px for header
+      const height = window.innerHeight * 3; // Make canvas taller
       setCanvasSize({ width: 3000, height });
 
       // Generate stars
       const newStars = [];
-      for (let i = 0; i < 200; i++) {
+      for (let i = 0; i < 400; i++) { // More stars for bigger canvas
         newStars.push({
           x: Math.random() * 3000,
           y: Math.random() * height,
@@ -36,43 +38,43 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
   useImperativeHandle(ref, () => ({
     addBlock: (blockId, x, y) => {
-      const blockData = getBlockById(blockId);
-      const engine = engineRef.current;
-      if (!blockData || !engine) return;
-  
-      const scale = 2;
-      const translatedX = x;
-      const translatedY = y;
-  
-      const blockParts = blockData.parts.map(part => {
-        const vertices = Matter.Vertices.create(part);
-        const center = Matter.Vertices.centre(vertices);
-        const body = Matter.Bodies.fromVertices(
-          translatedX + center.x, 
-          translatedY + center.y, 
-          [vertices], {
-          render: {
-            fillStyle: blockData.color,
-            strokeStyle: 'rgba(0,0,0,0.2)',
-            lineWidth: 2,
-          }
+        const blockData = getBlockById(blockId);
+        const engine = engineRef.current;
+        if (!blockData || !engine) return;
+
+        const scale = 2; // Keep internal scaling consistent
+        const translatedX = x * zoomRef.current;
+        const translatedY = y * zoomRef.current;
+
+        const blockParts = blockData.parts.map(part => {
+            const vertices = part.map(p => ({ x: p.x, y: p.y }));
+            return Matter.Bodies.fromVertices(translatedX, translatedY, [vertices], {
+                render: {
+                    fillStyle: blockData.color,
+                    strokeStyle: 'rgba(0,0,0,0.2)',
+                    lineWidth: 2,
+                }
+            });
         });
-        return body;
-      });
-  
-      const compoundBody = Matter.Body.create({
-        parts: blockParts,
-        render: {
-          fillStyle: blockData.color,
-          strokeStyle: 'rgba(0,0,0,0.2)',
-          lineWidth: 2,
-        }
-      });
-      
-      compoundBody.label = `block-${blockId}`;
-  
-      Matter.World.add(engine.world, compoundBody);
+
+        const compoundBody = Matter.Body.create({
+            parts: blockParts,
+        });
+
+        compoundBody.label = `block-${blockId}`;
+
+        Matter.World.add(engine.world, compoundBody);
     },
+    setZoom: (zoom) => {
+        zoomRef.current = zoom;
+        const render = renderRef.current;
+        if (!render) return;
+
+        Matter.Render.lookAt(render, {
+            min: { x: 0, y: 0 },
+            max: { x: canvasSize.width / zoomRef.current, y: canvasSize.height / zoomRef.current }
+        });
+    }
   }));
 
   useEffect(() => {
@@ -84,7 +86,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     engineRef.current = engine;
     const world = engine.world;
     
-    const scale = 2;
     const renderWidth = canvasSize.width;
     const renderHeight = canvasSize.height;
 
@@ -106,9 +107,11 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     });
 
     // Ground
-    World.add(world, Bodies.rectangle(renderWidth / 2, renderHeight, renderWidth, 120, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
+    World.add(world, Bodies.rectangle(renderWidth / 2, renderHeight - 60, renderWidth, 120, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
     // Left Wall
-    World.add(world, Bodies.rectangle(0, renderHeight / 2, 120, renderHeight, { isStatic: true, render: { visible: false } }));
+    World.add(world, Bodies.rectangle(-60, renderHeight / 2, 120, renderHeight, { isStatic: true, render: { visible: false } }));
+    // Right Wall
+    World.add(world, Bodies.rectangle(renderWidth + 60, renderHeight / 2, 120, renderHeight, { isStatic: true, render: { visible: false } }));
 
     const mouse = Mouse.create(render.canvas);
     
@@ -125,61 +128,17 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     World.add(world, mouseConstraint);
     render.mouse = mouse;
 
-    const autoExtendCanvas = () => {
-        const rightmostPoint = world.bodies.reduce((max, body) => {
-            if (body.isStatic) return max;
-            return Math.max(max, body.bounds.max.x);
-        }, 0);
-    
-        if (rightmostPoint > render.bounds.max.x - 1000) {
-            const newWidth = render.bounds.max.x + 2000;
-            const newRenderWidth = newWidth;
-    
-            // Extend ground
-            const ground = world.bodies.find(body => body.isStatic && body.position.y >= render.bounds.max.y - 60);
-            if(ground) {
-                Matter.Body.setPosition(ground, {x: newRenderWidth / 2, y: ground.position.y});
-                Matter.Body.setVertices(ground, [
-                    { x: 0, y: render.bounds.max.y - 60 },
-                    { x: newRenderWidth, y: render.bounds.max.y - 60 },
-                    { x: newRenderWidth, y: render.bounds.max.y + 60 },
-                    { x: 0, y: render.bounds.max.y + 60 },
-                ]);
-            }
-            
-            render.bounds.max.x = newRenderWidth;
-            
-            setCanvasSize(prev => ({...prev, width: prev.width + 2000 / scale}));
-
-            // Add more stars in the new area
-            setStars(currentStars => {
-              const newStars = [...currentStars];
-              for (let i = 0; i < 100; i++) {
-                  newStars.push({
-                      x: (render.bounds.max.x - 2000) / scale + Math.random() * (2000 / scale),
-                      y: Math.random() * (render.bounds.max.y / scale),
-                      radius: Math.random() * 1.5
-                  });
-              }
-              return newStars;
-            });
-        }
-    };
-    
-    Events.on(engine, 'afterUpdate', autoExtendCanvas);
-
     Render.run(render);
     const runner = Runner.create();
     Runner.run(runner, engine);
 
     return () => {
-      Events.off(engine, 'afterUpdate', autoExtendCanvas);
       Render.stop(render);
       Runner.stop(runner);
       World.clear(world, false);
       Engine.clear(engine);
-      render.canvas.remove();
-      render.textures = {};
+      if(render.canvas) render.canvas.remove();
+      if(render.textures) render.textures = {};
     };
   }, [canvasSize.height]);
 
