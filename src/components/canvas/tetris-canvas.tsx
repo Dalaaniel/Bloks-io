@@ -40,26 +40,39 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       const engine = engineRef.current;
       if (!blockData || !engine) return;
 
-      const scale = 2; // Keep this consistent with render scale
+      const scale = 2;
       const translatedX = x * scale;
       const translatedY = y * scale;
-      
-      const newBlock = Matter.Body.create({
-        parts: blockData.parts.map(part => Matter.Bodies.fromVertices(translatedX, translatedY, [part], {
-             render: {
+
+      // Create a compound body from the parts
+      const compoundBody = Matter.Body.create({
+        parts: blockData.parts.map(partVertices => {
+          // Find the center of the part for correct positioning
+          const partCenter = Matter.Vertices.centre(partVertices);
+          return Matter.Bodies.fromVertices(
+            translatedX + partCenter.x,
+            translatedY + partCenter.y,
+            [partVertices], 
+            {
+              render: {
                 fillStyle: blockData.color,
                 strokeStyle: 'rgba(0,0,0,0.2)',
                 lineWidth: 2,
+              }
             }
-        })),
-         render: {
-            fillStyle: blockData.color,
-            strokeStyle: 'rgba(0,0,0,0.2)',
-            lineWidth: 2,
-        }
+          );
+        })
+      });
+
+      Matter.Body.set(compoundBody, 'render', {
+        fillStyle: blockData.color,
+        strokeStyle: 'rgba(0,0,0,0.2)',
+        lineWidth: 2,
       });
       
-      Matter.World.add(engine.world, newBlock);
+      compoundBody.label = `block-${blockId}`;
+
+      Matter.World.add(engine.world, compoundBody);
     },
   }));
 
