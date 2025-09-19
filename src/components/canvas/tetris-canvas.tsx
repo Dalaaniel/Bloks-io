@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
@@ -52,12 +53,26 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         width: canvasSize.width,
         height: canvasSize.height,
         wireframes: false,
-        background: 'transparent',
+        background: '#0a0a0a', // Dark background for starry night
       },
     });
 
+    // Add stars
+    for (let i = 0; i < 100; i++) {
+        const x = Math.random() * canvasSize.width;
+        const y = Math.random() * canvasSize.height;
+        const radius = Math.random() * 1.5;
+        const star = Bodies.circle(x, y, radius, {
+            isStatic: true,
+            render: {
+                fillStyle: 'white'
+            }
+        });
+        World.add(world, star);
+    }
+
     // Ground
-    World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#e0e0e0' } }));
+    World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
     // Left Wall
     World.add(world, Bodies.rectangle(0, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
 
@@ -65,7 +80,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     const mouseConstraint = MouseConstraint.create(engine, {
       mouse: mouse,
       constraint: {
-        stiffness: 0.2,
+        stiffness: 0.1,
+        damping: 0.1,
         render: {
           visible: false,
         },
@@ -97,6 +113,21 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
             }
             render.bounds.max.x = newWidth;
             render.options.width = newWidth;
+            
+            // Add more stars in the new area
+            for (let i = 0; i < 50; i++) {
+                const x = prevSize.width + Math.random() * 1000;
+                const y = Math.random() * prevSize.height;
+                const radius = Math.random() * 1.5;
+                const star = Bodies.circle(x, y, radius, {
+                    isStatic: true,
+                    render: {
+                        fillStyle: 'white'
+                    }
+                });
+                World.add(world, star);
+            }
+            
             return { ...prevSize, width: newWidth };
         });
       }

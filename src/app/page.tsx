@@ -42,7 +42,7 @@ export default function Home() {
       <Inventory />
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-auto bg-background"
+        className="flex-1 overflow-auto bg-black"
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
