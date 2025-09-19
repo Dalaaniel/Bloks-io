@@ -39,39 +39,38 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       const blockData = getBlockById(blockId);
       const engine = engineRef.current;
       if (!blockData || !engine) return;
-
+  
       const scale = 2;
-      const translatedX = x * scale;
-      const translatedY = y * scale;
-
-      // Create a compound body from the parts
-      const compoundBody = Matter.Body.create({
-        parts: blockData.parts.map(partVertices => {
-          // Find the center of the part for correct positioning
-          const partCenter = Matter.Vertices.centre(partVertices);
-          return Matter.Bodies.fromVertices(
-            translatedX + partCenter.x,
-            translatedY + partCenter.y,
-            [partVertices], 
-            {
-              render: {
-                fillStyle: blockData.color,
-                strokeStyle: 'rgba(0,0,0,0.2)',
-                lineWidth: 2,
-              }
-            }
-          );
-        })
+      const translatedX = x;
+      const translatedY = y;
+  
+      const blockParts = blockData.parts.map(part => {
+        const vertices = Matter.Vertices.create(part);
+        const center = Matter.Vertices.centre(vertices);
+        const body = Matter.Bodies.fromVertices(
+          translatedX + center.x, 
+          translatedY + center.y, 
+          [vertices], {
+          render: {
+            fillStyle: blockData.color,
+            strokeStyle: 'rgba(0,0,0,0.2)',
+            lineWidth: 2,
+          }
+        });
+        return body;
       });
-
-      Matter.Body.set(compoundBody, 'render', {
-        fillStyle: blockData.color,
-        strokeStyle: 'rgba(0,0,0,0.2)',
-        lineWidth: 2,
+  
+      const compoundBody = Matter.Body.create({
+        parts: blockParts,
+        render: {
+          fillStyle: blockData.color,
+          strokeStyle: 'rgba(0,0,0,0.2)',
+          lineWidth: 2,
+        }
       });
       
       compoundBody.label = `block-${blockId}`;
-
+  
       Matter.World.add(engine.world, compoundBody);
     },
   }));
@@ -86,8 +85,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     const world = engine.world;
     
     const scale = 2;
-    const renderWidth = canvasSize.width * scale;
-    const renderHeight = canvasSize.height * scale;
+    const renderWidth = canvasSize.width;
+    const renderHeight = canvasSize.height;
 
     const render = Render.create({
       element: sceneRef.current,
@@ -112,8 +111,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     World.add(world, Bodies.rectangle(0, renderHeight / 2, 120, renderHeight, { isStatic: true, render: { visible: false } }));
 
     const mouse = Mouse.create(render.canvas);
-    mouse.scale.x = scale;
-    mouse.scale.y = scale;
     
     const mouseConstraint = MouseConstraint.create(engine, {
       mouse: mouse,
