@@ -48,23 +48,25 @@ export default function Home() {
   return (
     <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
       <Inventory />
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-auto bg-black relative"
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-      >
-        <TetrisCanvas ref={tetrisCanvasApiRef} />
-        <div className="absolute top-1/2 right-4 -translate-y-1/2 h-64">
-          <Slider
-            defaultValue={[0.5]}
-            min={0.1}
-            max={2}
-            step={0.05}
-            orientation="vertical"
-            onValueChange={handleZoomChange}
-            className="h-full"
-          />
+      <div className="flex-1 flex bg-black relative">
+        <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-auto"
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+        >
+            <TetrisCanvas ref={tetrisCanvasApiRef} />
+        </div>
+        <div className="w-24 flex items-center justify-center p-4">
+            <Slider
+                defaultValue={[0.5]}
+                min={0.1}
+                max={2}
+                step={0.05}
+                orientation="vertical"
+                onValueChange={handleZoomChange}
+                className="h-64"
+            />
         </div>
       </div>
     </div>

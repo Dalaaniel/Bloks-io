@@ -15,9 +15,10 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Matter.Engine>();
   const renderRef = useRef<Matter.Render>();
+  const mouseRef = useRef<Matter.Mouse>();
   const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 3000 });
   const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
-  const zoomRef = useRef(1);
+  const zoomRef = useRef(0.5);
 
   useEffect(() => {
     const newStars = [];
@@ -62,10 +63,13 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         zoomRef.current = zoom;
         const render = renderRef.current;
         const scene = sceneRef.current;
-        if (!render || !scene) return;
+        const mouse = mouseRef.current;
+        if (!render || !scene || !mouse) return;
         
         scene.style.transform = `scale(${zoom})`;
         scene.style.transformOrigin = '0 0';
+
+        Matter.Mouse.setScale(mouse, { x: 1 / zoom, y: 1 / zoom });
     },
     getZoom: () => zoomRef.current,
   }));
@@ -73,7 +77,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events } = Matter;
+    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint } = Matter;
 
     const engine = Engine.create({ gravity: { y: 0.4 } });
     engineRef.current = engine;
@@ -99,6 +103,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     World.add(world, Bodies.rectangle(canvasSize.width + 30, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
 
     const mouse = Mouse.create(render.canvas);
+    mouseRef.current = mouse;
     
     const mouseConstraint = MouseConstraint.create(engine, {
       mouse: mouse,
@@ -117,29 +122,16 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     const runner = Runner.create();
     Runner.run(runner, engine);
     
-    // Adjust mouse scale
-    Mouse.setZoom = (mouse, zoom) => {
-        mouse.scale.x = 1 / zoom;
-        mouse.scale.y = 1 / zoom;
-    };
-    Mouse.setZoom(mouse, zoomRef.current);
-
-    const handleZoom = () => {
-        if(renderRef.current) {
-            Mouse.setZoom(mouse, zoomRef.current);
-        }
-    };
-    
-    const slider = document.querySelector('.h-full');
-    if (slider) {
-      slider.addEventListener('input', handleZoom);
+    // Initial zoom and mouse scale
+    const initialZoom = zoomRef.current;
+    if (sceneRef.current) {
+        sceneRef.current.style.transform = `scale(${initialZoom})`;
+        sceneRef.current.style.transformOrigin = '0 0';
     }
+    Matter.Mouse.setScale(mouse, { x: 1 / initialZoom, y: 1 / initialZoom });
 
 
     return () => {
-      if (slider) {
-        slider.removeEventListener('input', handleZoom);
-      }
       Render.stop(render);
       Runner.stop(runner);
       World.clear(world, false);
