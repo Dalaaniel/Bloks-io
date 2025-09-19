@@ -23,7 +23,7 @@ export default function Home() {
         const scrollRect = scrollContainerRef.current.getBoundingClientRect();
         const zoom = tetrisCanvasApiRef.current.getZoom();
         const x = (event.clientX - scrollRect.left + scrollContainerRef.current.scrollLeft) / zoom;
-        const y = (event.clientY - scrollRect.top) / zoom;
+        const y = (event.clientY - scrollRect.top + scrollContainerRef.current.scrollTop) / zoom;
         tetrisCanvasApiRef.current.addBlock(blockId, x, y);
       }
     } else {
@@ -57,10 +57,10 @@ export default function Home() {
         <TetrisCanvas ref={tetrisCanvasApiRef} />
         <div className="absolute top-1/2 right-4 -translate-y-1/2 h-64">
           <Slider
-            defaultValue={[1]}
-            min={0.2}
+            defaultValue={[0.5]}
+            min={0.1}
             max={2}
-            step={0.1}
+            step={0.05}
             orientation="vertical"
             onValueChange={handleZoomChange}
             className="h-full"
