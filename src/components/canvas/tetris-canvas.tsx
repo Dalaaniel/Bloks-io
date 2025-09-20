@@ -21,14 +21,13 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const renderRef = useRef<Matter.Render>();
   const mouseRef = useRef<Matter.Mouse>();
   const mouseConstraintRef = useRef<Matter.MouseConstraint>();
-  const mouseConstraintRef = useRef<Matter.MouseConstraint>();
   const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 3000 });
   const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
   const zoomRef = useRef(0.5);
   const bodiesRef = useRef<Matter.Body[]>([]);
   const draggedBodyInfoRef = useRef<{ body: Matter.Body | null, initialCollisions: Set<Matter.Body> }>({ body: null, initialCollisions: new Set() });
-  const bodiesRef = useRef<Matter.Body[]>([]);
-  const draggedBodyInfoRef = useRef<{ body: Matter.Body | null, initialCollisions: Set<Matter.Body> }>({ body: null, initialCollisions: new Set() });
+
+
 
   useEffect(() => {
     const newStars = [];
