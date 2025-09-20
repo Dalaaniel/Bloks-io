@@ -11,6 +11,10 @@ export interface TetrisCanvasApi {
   getZoom: () => number;
 }
 
+const BLOCK_SIZE = 40;
+const MAX_DRAG_WEIGHT = 60;
+const BLOCK_WEIGHT = 40;
+
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Matter.Engine>();
@@ -53,6 +57,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
         const compoundBody = Matter.Body.create({
             parts: blockParts,
+            mass: BLOCK_WEIGHT, // Logic 2: Set weight
         });
 
         compoundBody.label = `block-${blockId}`;
@@ -77,7 +82,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint } = Matter;
+    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events } = Matter;
 
     const engine = Engine.create({ gravity: { y: 0.4 } });
     engineRef.current = engine;
@@ -113,6 +118,42 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
           visible: false,
         },
       },
+    });
+
+    // Logic 3: Drag weight calculation
+    Events.on(mouseConstraint, 'startdrag', (event) => {
+      const draggedBody = event.body;
+      let totalWeightInColumn = draggedBody.mass;
+      
+      const bodies = Matter.Composite.allBodies(world);
+      const draggedBodyColumnMin = Math.floor(draggedBody.bounds.min.x / (BLOCK_SIZE * 2));
+      const draggedBodyColumnMax = Math.floor(draggedBody.bounds.max.x / (BLOCK_SIZE * 2));
+
+      for (const body of bodies) {
+          if (body === draggedBody || body.isStatic) continue;
+
+          const bodyColumnMin = Math.floor(body.bounds.min.x / (BLOCK_SIZE * 2));
+          const bodyColumnMax = Math.floor(body.bounds.max.x / (BLOCK_SIZE * 2));
+
+          const inSameColumn = Math.max(draggedBodyColumnMin, bodyColumnMin) <= Math.min(draggedBodyColumnMax, bodyColumnMax);
+
+          if (inSameColumn && body.bounds.min.y > draggedBody.bounds.max.y) {
+            // This assumes each body is a full tetris block with weight 40
+             totalWeightInColumn += body.mass;
+          }
+      }
+
+      // We only check the weight of the objects below it.
+      const weightOfBelowObjects = totalWeightInColumn - draggedBody.mass;
+      const dragWeight = BLOCK_WEIGHT + weightOfBelowObjects;
+
+
+      if (dragWeight > MAX_DRAG_WEIGHT) {
+        // Cancel the drag by disabling the mouse constraint temporarily
+        mouseConstraint.constraint.bodyB = null;
+        mouseConstraint.constraint.bodyB = null;
+        mouseConstraint.body = null;
+      }
     });
 
     World.add(world, mouseConstraint);
@@ -175,3 +216,5 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
+
+    
