@@ -123,7 +123,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     // Logic 3: Drag weight calculation
     Events.on(mouseConstraint, 'startdrag', (event) => {
       const draggedBody = event.body;
-      let totalWeightInColumn = draggedBody.mass;
+      let totalWeightOnTop = 0;
       
       const bodies = Matter.Composite.allBodies(world);
       const draggedBodyColumnMin = Math.floor(draggedBody.bounds.min.x / (BLOCK_SIZE * 2));
@@ -137,16 +137,13 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
           const inSameColumn = Math.max(draggedBodyColumnMin, bodyColumnMin) <= Math.min(draggedBodyColumnMax, bodyColumnMax);
 
-          if (inSameColumn && body.bounds.min.y > draggedBody.bounds.max.y) {
-            // This assumes each body is a full tetris block with weight 40
-             totalWeightInColumn += body.mass;
+          // Check if the body is ON TOP of the dragged body.
+          if (inSameColumn && body.bounds.max.y < draggedBody.bounds.min.y) {
+             totalWeightOnTop += body.mass;
           }
       }
 
-      // We only check the weight of the objects below it.
-      const weightOfBelowObjects = totalWeightInColumn - draggedBody.mass;
-      const dragWeight = BLOCK_WEIGHT + weightOfBelowObjects;
-
+      const dragWeight = BLOCK_WEIGHT + totalWeightOnTop;
 
       if (dragWeight > MAX_DRAG_WEIGHT) {
         // Cancel the drag by disabling the mouse constraint temporarily
