@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
   },
   
   output: 'standalone', // Cloudflare Pages needs this for deployment
-  distDir: 'build', // Custom build directory (optional, can use `out` as well)
+  distDir: 'out', // Custom build directory (optional, can use `out` as well)
 
   // Enable the static export if you're doing that route
   trailingSlash: true, 
