@@ -20,9 +20,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const engineRef = useRef<Matter.Engine>();
   const renderRef = useRef<Matter.Render>();
   const mouseRef = useRef<Matter.Mouse>();
-  const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 8000 });
+  const mouseConstraintRef = useRef<Matter.MouseConstraint>();
+  const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 3000 });
   const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
-  const zoomRef = useRef(0.25);
+  const zoomRef = useRef(0.5);
+  const bodiesRef = useRef<Matter.Body[]>([]);
+  const draggedBodyInfoRef = useRef<{ body: Matter.Body | null, initialCollisions: Set<Matter.Body> }>({ body: null, initialCollisions: new Set() });
 
   useEffect(() => {
     const newStars = [];
@@ -57,12 +60,36 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
         const compoundBody = Matter.Body.create({
             parts: blockParts,
-            mass: BLOCK_WEIGHT, // Logic 2: Set weight
+            mass: BLOCK_WEIGHT,
         });
+        
+        const bounds = compoundBody.bounds;
+        const width = bounds.max.x - bounds.min.x;
+        const height = bounds.max.y - bounds.min.y;
+        
+        const sensor = Matter.Bodies.rectangle(
+            compoundBody.position.x,
+            compoundBody.position.y,
+            width * 2,
+            height * 2,
+            {
+                isSensor: true,
+                isStatic: true, // Sensor moves with the body
+                render: {
+                    visible: false, // Make the sensor invisible
+                },
+            }
+        );
+
+        // Link body and sensor
+        (compoundBody as any).sensor = sensor;
+        (sensor as any).parentBody = compoundBody;
 
         compoundBody.label = `block-${blockId}`;
+        sensor.label = `sensor-for-block-${blockId}-${Date.now()}`;
 
-        Matter.World.add(engine.world, compoundBody);
+        Matter.World.add(engine.world, [compoundBody, sensor]);
+        bodiesRef.current.push(compoundBody);
     },
     setZoom: (zoom) => {
         zoomRef.current = zoom;
@@ -82,7 +109,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events } = Matter;
+    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events, Query } = Matter;
 
     const engine = Engine.create({ gravity: { y: 0.4 } });
     engineRef.current = engine;
@@ -119,38 +146,59 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         },
       },
     });
+    mouseConstraintRef.current = mouseConstraint;
 
-    // Logic 3: Drag weight calculation
+
     Events.on(mouseConstraint, 'startdrag', (event) => {
-      const draggedBody = event.body;
-      let totalWeightOnTop = 0;
-      
-      const bodies = Matter.Composite.allBodies(world);
-      const draggedBodyColumnMin = Math.floor(draggedBody.bounds.min.x / (BLOCK_SIZE * 2));
-      const draggedBodyColumnMax = Math.floor(draggedBody.bounds.max.x / (BLOCK_SIZE * 2));
+        const draggedBody = event.body;
+        draggedBodyInfoRef.current.body = draggedBody;
 
-      for (const body of bodies) {
-          if (body === draggedBody || body.isStatic) continue;
+        const allSensors = bodiesRef.current
+          .map(b => (b as any).sensor)
+          .filter(s => s && s !== (draggedBody as any).sensor);
 
-          const bodyColumnMin = Math.floor(body.bounds.min.x / (BLOCK_SIZE * 2));
-          const bodyColumnMax = Math.floor(body.bounds.max.x / (BLOCK_SIZE * 2));
+        const initialCollisions = new Set<Matter.Body>();
+        const collisions = Query.collides(draggedBody, allSensors);
+        collisions.forEach(collision => {
+            const sensor = collision.bodyA === draggedBody ? collision.bodyB : collision.bodyA;
+            initialCollisions.add(sensor);
+        });
+        draggedBodyInfoRef.current.initialCollisions = initialCollisions;
+    });
 
-          const inSameColumn = Math.max(draggedBodyColumnMin, bodyColumnMin) <= Math.min(draggedBodyColumnMax, bodyColumnMax);
+    Events.on(mouseConstraint, 'enddrag', () => {
+        draggedBodyInfoRef.current = { body: null, initialCollisions: new Set() };
+    });
 
-          // Check if the body is ON TOP of the dragged body.
-          if (inSameColumn && body.bounds.max.y < draggedBody.bounds.min.y) {
-             totalWeightOnTop += body.mass;
-          }
-      }
+    Events.on(engine, 'beforeUpdate', () => {
+        // Move sensors with their parent bodies
+        bodiesRef.current.forEach(body => {
+            const sensor = (body as any).sensor;
+            if (sensor) {
+                Matter.Body.setPosition(sensor, body.position);
+            }
+        });
+        
+        const { body: draggedBody, initialCollisions } = draggedBodyInfoRef.current;
+        if (!draggedBody || !mouseConstraint.body) return;
 
-      const dragWeight = BLOCK_WEIGHT + totalWeightOnTop;
+        const allSensors = bodiesRef.current
+            .map(b => (b as any).sensor)
+            .filter(s => s && s !== (draggedBody as any).sensor);
+        
+        const collisions = Query.collides(draggedBody, allSensors);
 
-      if (dragWeight > MAX_DRAG_WEIGHT) {
-        // Cancel the drag by disabling the mouse constraint temporarily
-        mouseConstraint.constraint.bodyB = null;
-        mouseConstraint.constraint.bodyB = null;
-        mouseConstraint.body = null;
-      }
+        for (const collision of collisions) {
+            const sensor = collision.bodyA === draggedBody ? collision.bodyB : collision.bodyA;
+            if (!initialCollisions.has(sensor)) {
+                // New collision detected, stop the drag
+                mouseConstraint.constraint.bodyB = null;
+                mouseConstraint.constraint.bodyB = null;
+                mouseConstraint.body = null;
+                draggedBodyInfoRef.current = { body: null, initialCollisions: new Set() };
+                break; 
+            }
+        }
     });
 
     World.add(world, mouseConstraint);
@@ -160,7 +208,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     const runner = Runner.create();
     Runner.run(runner, engine);
     
-    // Initial zoom and mouse scale
     const initialZoom = zoomRef.current;
     if (sceneRef.current) {
         sceneRef.current.style.transform = `scale(${initialZoom})`;
@@ -176,6 +223,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       Engine.clear(engine);
       if(render.canvas) render.canvas.remove();
       if(render.textures) render.textures = {};
+      bodiesRef.current = [];
     };
   }, [canvasSize.width, canvasSize.height]);
 
@@ -213,5 +261,3 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
-
-    
