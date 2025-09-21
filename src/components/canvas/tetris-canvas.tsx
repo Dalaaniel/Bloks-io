@@ -27,11 +27,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const bodiesRef = useRef<Matter.Body[]>([]);
   const draggedBodyInfoRef = useRef<{ body: Matter.Body | null, initialCollisions: Set<Matter.Body> }>({ body: null, initialCollisions: new Set() });
 
-
-
   useEffect(() => {
     const newStars = [];
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 400; i++) {
       newStars.push({
         x: Math.random() * canvasSize.width,
         y: Math.random() * canvasSize.height,
@@ -76,7 +74,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
             height * 2,
             {
                 isSensor: true,
-                isStatic: true, // Sensor moves with the body
+                isStatic: false, // Sensor moves with the body
                 render: {
                     visible: false, // Make the sensor invisible
                 },
@@ -151,7 +149,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     mouseConstraintRef.current = mouseConstraint;
 
 
-    Events.on(mouseConstraint, 'startdrag', (event) => {
+    Events.on(mouseConstraint, 'startdrag', (event: any) => {
         const draggedBody = event.body;
         draggedBodyInfoRef.current.body = draggedBody;
 
@@ -160,11 +158,13 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
           .filter(s => s && s !== (draggedBody as any).sensor);
 
         const initialCollisions = new Set<Matter.Body>();
-        const collisions = Query.collides(draggedBody, allSensors);
-        collisions.forEach(collision => {
-            const sensor = collision.bodyA === draggedBody ? collision.bodyB : collision.bodyA;
-            initialCollisions.add(sensor);
-        });
+        if (allSensors.length > 0) {
+            const collisions = Query.collides(draggedBody, allSensors);
+            collisions.forEach(collision => {
+                const sensor = collision.bodyA === draggedBody ? collision.bodyB : collision.bodyA;
+                initialCollisions.add(sensor);
+            });
+        }
         draggedBodyInfoRef.current.initialCollisions = initialCollisions;
     });
 
@@ -178,6 +178,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
             const sensor = (body as any).sensor;
             if (sensor) {
                 Matter.Body.setPosition(sensor, body.position);
+                Matter.Body.setAngle(sensor, body.angle);
             }
         });
         
@@ -188,17 +189,18 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
             .map(b => (b as any).sensor)
             .filter(s => s && s !== (draggedBody as any).sensor);
         
-        const collisions = Query.collides(draggedBody, allSensors);
+        if (allSensors.length > 0) {
+            const collisions = Query.collides(draggedBody, allSensors);
 
-        for (const collision of collisions) {
-            const sensor = collision.bodyA === draggedBody ? collision.bodyB : collision.bodyA;
-            if (!initialCollisions.has(sensor)) {
-                // New collision detected, stop the drag
-                mouseConstraint.constraint.bodyB = null;
-                mouseConstraint.constraint.bodyB = null;
-                mouseConstraint.body = null;
-                draggedBodyInfoRef.current = { body: null, initialCollisions: new Set() };
-                break; 
+            for (const collision of collisions) {
+                const sensor = collision.bodyA === draggedBody ? collision.bodyB : collision.bodyA;
+                if (!initialCollisions.has(sensor)) {
+                    // New collision detected, stop the drag
+                    mouseConstraint.constraint.bodyB = null;
+                    (mouseConstraint as any).body = null;
+                    draggedBodyInfoRef.current = { body: null, initialCollisions: new Set() };
+                    break; 
+                }
             }
         }
     });
@@ -263,3 +265,4 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
+

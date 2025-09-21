@@ -1,0 +1,10 @@
+name = "bloks-io"
+type = "javascript"
+
+[env.production]
+account_id = "e3a2bc8889403d14e3a1f6dc96bd2fc7"
+workers_dev = true 
+zone_id = ""
+
+[build]
+command = "npm run build"
