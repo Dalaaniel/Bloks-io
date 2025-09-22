@@ -25,7 +25,7 @@ export default function RootLayout({
         <InventoryProvider>
           <div className="flex flex-col h-screen">
             <Header />
-            <main className="flex-1 overflow-hidden">{children}</main>
+            <main className="flex-1">{children}</main>
             <Toaster />
           </div>
         </InventoryProvider>
