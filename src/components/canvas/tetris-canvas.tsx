@@ -23,7 +23,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const renderRef = useRef<Matter.Render>();
   const mouseRef = useRef<Matter.Mouse>();
   const mouseConstraintRef = useRef<Matter.MouseConstraint>();
-  const [canvasSize, setCanvasSize] = useState({ width: 3000, height: 3000 });
+  const [canvasSize, setCanvasSize] = useState({ width: 10000, height: 3000 });
   const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
   const zoomRef = useRef(0.5);
   const bodiesRef = useRef<Matter.Body[]>([]);
@@ -31,7 +31,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
   useEffect(() => {
     const newStars = [];
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < 1200; i++) {
       newStars.push({
         x: Math.random() * canvasSize.width,
         y: Math.random() * canvasSize.height,
