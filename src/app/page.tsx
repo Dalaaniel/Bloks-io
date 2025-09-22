@@ -73,7 +73,7 @@ export default function Home() {
         </div>
         <div className="w-24 flex items-center justify-center p-4">
             <Slider
-                defaultValue={[0.25]}
+                defaultValue={[0.5]}
                 min={0.1}
                 max={2}
                 step={0.05}
