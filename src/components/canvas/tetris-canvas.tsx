@@ -19,6 +19,10 @@ const SPAWN_Y_OFFSET = 29500;
 
 type DragMode = 'none' | 'panning' | 'zooming';
 
+interface CustomBody extends Body {
+  initialOverlapWhitelist?: Set<number>;
+}
+
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const starsCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,15 +33,13 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   
   const [canvasSize] = useState({ width: 100000, height: 30000 });
   
-  const { zoom, setZoom } = useInventory();
+  const { zoom, setZoom, team } = useInventory();
   
   const dragModeRef = useRef<DragMode>('none');
   const lastMousePosition = useRef({ x: 0, y: 0 });
   const viewCenter = useRef({ x: canvasSize.width / 2, y: canvasSize.height - 1000 });
   const zoomStartRef = useRef({ y: 0, zoom: 1 });
   
-  const initialOverlapWhitelistRef = useRef<Set<number>>(new Set());
-
   useEffect(() => {
     const starsCanvas = starsCanvasRef.current;
     if (!starsCanvas) return;
@@ -77,9 +79,15 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         });
     });
 
-    const compoundBody = Matter.Body.create({
+    const teamCategory = team === 'red' ? 0b0001 : 0b0010;
+
+    const compoundBody: CustomBody = Matter.Body.create({
         parts: blockParts,
         mass: BLOCK_WEIGHT,
+        collisionFilter: {
+          category: teamCategory,
+          mask: 0b1111 // Collide with everything
+        }
     });
     
     compoundBody.label = `block-${team}-${blockId}`;
@@ -181,7 +189,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     });
     renderRef.current = render;
     
-    World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height - 30, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
+    World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height - 30, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' }, collisionFilter: { category: 0b0100 } }));
 
     const mouse = Mouse.create(render.canvas);
     mouseRef.current = mouse;
@@ -203,59 +211,71 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     Runner.run(runner, engine);
     
     updateCamera();
-    
-    Events.on(mouseConstraint, 'mousedown', () => {
-        if (!mouseConstraint.body) return;
-        const draggedBody = mouseConstraint.body;
-        const allOtherBodies = Composite.allBodies(engine.world).filter(
-            (body: Body) => body.id !== draggedBody.id && !body.isStatic
-        );
-        
-        initialOverlapWhitelistRef.current.clear();
-        
-        allOtherBodies.forEach(otherBody => {
-            const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
-            const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
-            
-            const fictiveBounds = {
-                min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
-                max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
-            };
-            
-            if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
-                initialOverlapWhitelistRef.current.add(otherBody.id);
-            }
-        });
-    });
 
-    Events.on(mouseConstraint, 'mouseup', () => {
-        initialOverlapWhitelistRef.current.clear();
+    Events.on(mouseConstraint, 'mousedown', () => {
+        const mc = mouseConstraintRef.current;
+        if (!mc || !mc.body) return;
+
+        const draggedBody: CustomBody = mc.body;
+        
+        // One-time whitelist generation
+        if (draggedBody.initialOverlapWhitelist === undefined) {
+            draggedBody.initialOverlapWhitelist = new Set<number>();
+            const allOtherBodies = Composite.allBodies(engine.world).filter(
+                (body: Body) => body.id !== draggedBody.id && !body.isStatic
+            );
+
+            allOtherBodies.forEach(otherBody => {
+                const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
+                const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
+                
+                // 200% fictive zone
+                const fictiveBounds = {
+                    min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
+                    max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
+                };
+                
+                if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
+                    draggedBody.initialOverlapWhitelist!.add(otherBody.id);
+                }
+            });
+        }
     });
 
     Events.on(engine, 'beforeUpdate', () => {
         const mc = mouseConstraintRef.current;
         if (!mc || !mc.body) return;
 
-        const draggedBody = mc.body;
+        const draggedBody: CustomBody = mc.body;
+        
+        // Ensure whitelist exists, if not, something is wrong, but we can fail safe
+        if (draggedBody.initialOverlapWhitelist === undefined) {
+            return;
+        }
+
         const allOtherBodies = Composite.allBodies(engine.world).filter(
             (body: Body) => body.id !== draggedBody.id && !body.isStatic
         );
 
         for (const otherBody of allOtherBodies) {
-            if (initialOverlapWhitelistRef.current.has(otherBody.id)) {
+            // Only check against blocks NOT on the permanent whitelist
+            if (draggedBody.initialOverlapWhitelist.has(otherBody.id)) {
                 continue; 
             }
 
             const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
             const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
 
+            // 200% fictive zone
             const fictiveBounds = {
                 min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
                 max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
             };
             
             if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
-                 mc.constraint.bodyB = null; // Correct way to release the body
+                 if (mc.constraint) {
+                    mc.constraint.bodyB = null; 
+                 }
                  break; 
             }
         }
@@ -287,6 +307,17 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   useEffect(() => {
     updateCamera();
   }, [zoom]);
+
+  useEffect(() => {
+    // Update mouse constraint based on team
+    const mc = mouseConstraintRef.current;
+    const teamCategory = team === 'red' ? 0b0001 : 0b0010;
+    const groundCategory = 0b0100;
+
+    if (mc) {
+        mc.collisionFilter.mask = teamCategory | groundCategory;
+    }
+  }, [team]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
