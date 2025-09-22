@@ -62,26 +62,26 @@ export default function Home() {
   return (
     <div className="flex h-full">
       <Inventory onBlockClick={handleSpawnBlock} />
-      <div className="flex-1 flex flex-col bg-black relative">
-        <div
-            ref={scrollContainerRef}
-            className="flex-1 overflow-auto"
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-        >
-            <TetrisCanvas ref={tetrisCanvasApiRef} />
-        </div>
-        <div className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center p-4 bg-black/30">
-            <Slider
-                defaultValue={[0.5]}
-                min={0.1}
-                max={2}
-                step={0.05}
-                orientation="vertical"
-                onValueChange={handleZoomChange}
-                className="h-64"
-            />
-        </div>
+      <div className="flex-1 flex flex-col relative bg-background">
+          <div
+              ref={scrollContainerRef}
+              className="flex-1 overflow-auto"
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+          >
+              <TetrisCanvas ref={tetrisCanvasApiRef} />
+          </div>
+          <div className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center p-4 bg-black/30">
+              <Slider
+                  defaultValue={[0.5]}
+                  min={0.1}
+                  max={2}
+                  step={0.05}
+                  orientation="vertical"
+                  onValueChange={handleZoomChange}
+                  className="h-64"
+              />
+          </div>
       </div>
     </div>
   );
