@@ -62,7 +62,7 @@ export default function Home() {
   return (
     <div className="flex h-full">
       <Inventory onBlockClick={handleSpawnBlock} />
-      <div className="flex-1 flex bg-black relative">
+      <div className="flex-1 flex flex-col bg-black relative">
         <div
             ref={scrollContainerRef}
             className="flex-1 overflow-auto"
@@ -71,7 +71,7 @@ export default function Home() {
         >
             <TetrisCanvas ref={tetrisCanvasApiRef} />
         </div>
-        <div className="w-24 flex items-center justify-center p-4">
+        <div className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center p-4 bg-black/30">
             <Slider
                 defaultValue={[0.5]}
                 min={0.1}

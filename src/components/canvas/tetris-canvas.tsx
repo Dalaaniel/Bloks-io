@@ -97,8 +97,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       const world = engineRef.current?.world;
       if (!world) return;
   
+      const canvasCenterX = canvasSize.width / 2;
       const spawnAreaWidth = canvasSize.width / 4;
-      const xSpawn = team === 'blue' ? spawnAreaWidth / 2 : canvasSize.width - spawnAreaWidth / 2;
+      
+      const xSpawn = team === 'blue' 
+        ? canvasCenterX - spawnAreaWidth / 2 
+        : canvasCenterX + spawnAreaWidth / 2;
   
       addBlock(blockId, xSpawn, SPAWN_Y_OFFSET, team);
     },
@@ -138,7 +142,10 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     });
     renderRef.current = render;
     
+    // A single ground for the entire canvas
     World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height - 30, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
+    
+    // Side walls
     World.add(world, Bodies.rectangle(-30, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
     World.add(world, Bodies.rectangle(canvasSize.width + 30, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
 
@@ -189,7 +196,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         });
         
         const { body: draggedBody, initialCollisions } = draggedBodyInfoRef.current;
-        if (!draggedBody || !mouseConstraint.body) return;
+        if (!draggedBody || !(mouseConstraint as any).body) return;
 
         const allSensors = bodiesRef.current
             .map(b => (b as any).sensor)
