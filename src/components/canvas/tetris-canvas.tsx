@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
@@ -101,8 +102,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       const spawnAreaWidth = canvasSize.width / 4;
       
       const xSpawn = team === 'blue' 
-        ? canvasCenterX - spawnAreaWidth / 2 
-        : canvasCenterX + spawnAreaWidth / 2;
+        ? canvasCenterX - spawnAreaWidth
+        : canvasCenterX + spawnAreaWidth;
   
       addBlock(blockId, xSpawn, SPAWN_Y_OFFSET, team);
     },
@@ -144,10 +145,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     
     // A single ground for the entire canvas
     World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height - 30, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
-    
-    // Side walls
-    World.add(world, Bodies.rectangle(-30, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
-    World.add(world, Bodies.rectangle(canvasSize.width + 30, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
 
     const mouse = Mouse.create(render.canvas);
     mouseRef.current = mouse;
