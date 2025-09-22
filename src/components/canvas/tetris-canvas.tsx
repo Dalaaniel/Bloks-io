@@ -118,7 +118,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events, Query } = Matter;
+    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint } = Matter;
 
     const engine = Engine.create({ gravity: { y: 0.4 } });
     engineRef.current = engine;
@@ -196,16 +196,19 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         return;
     }
 
-    const mc = mouseConstraintRef.current;
-    if (mc && mc.body) {
-      // A block is being dragged by MouseConstraint, do nothing.
-      dragModeRef.current = 'none';
-      return;
-    }
-
-    // No block under cursor, start panning
-    dragModeRef.current = 'panning';
-    lastMousePosition.current = { x: e.clientX, y: e.clientY };
+    // Delay setting pan mode to allow Matter.js to pick up the body first
+    setTimeout(() => {
+      const mc = mouseConstraintRef.current;
+      // If mouse constraint is dragging a body, don't pan
+      if (mc && mc.body) {
+        dragModeRef.current = 'none';
+        return;
+      }
+      
+      // If no body is being dragged, start panning
+      dragModeRef.current = 'panning';
+      lastMousePosition.current = { x: e.clientX, y: e.clientY };
+    }, 0);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
