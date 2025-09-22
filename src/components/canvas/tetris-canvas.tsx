@@ -255,7 +255,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
             };
             
             if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
-                 mc.body = undefined;
+                 mc.constraint.bodyB = null; // Correct way to release the body
                  break; 
             }
         }
