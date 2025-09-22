@@ -1,26 +1,16 @@
 
 "use client";
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { useInventory } from '@/context/inventory-context';
 import Inventory from '@/components/canvas/inventory';
 import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-canvas';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Home() {
-  const { useBlock, team, zoom } = useInventory();
+  const { useBlock, team } = useInventory();
   const { toast } = useToast();
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
-
-  useEffect(() => {
-    // Scroll to the center of the canvas on initial load
-    if (scrollContainerRef.current) {
-      const { scrollWidth, scrollHeight, clientWidth, clientHeight } = scrollContainerRef.current;
-      scrollContainerRef.current.scrollLeft = (scrollWidth - clientWidth) / 2;
-      scrollContainerRef.current.scrollTop = scrollHeight - clientHeight;
-    }
-  }, []);
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -29,18 +19,16 @@ export default function Home() {
     if (!blockId) return;
 
     if (useBlock(blockId)) {
-      if (tetrisCanvasApiRef.current && scrollContainerRef.current) {
-        // The canvas is scaled, so we need to adjust the drop coordinates.
-        // We get the mouse position relative to the scroll container.
-        const scrollRect = scrollContainerRef.current.getBoundingClientRect();
-        const xOnContainer = event.clientX - scrollRect.left;
-        const yOnContainer = event.clientY - scrollRect.top;
+      if (tetrisCanvasApiRef.current) {
+        const canvasRect = event.currentTarget.getBoundingClientRect();
+        // Get mouse position relative to the canvas element
+        const xOnElement = event.clientX - canvasRect.left;
+        const yOnElement = event.clientY - canvasRect.top;
 
-        // We then translate that into coordinates on the scaled canvas.
-        const x = (xOnContainer + scrollContainerRef.current.scrollLeft) / zoom;
-        const y = (yOnContainer + scrollContainerRef.current.scrollTop) / zoom;
+        // Ask the canvas to convert element coordinates to world coordinates
+        const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
         
-        tetrisCanvasApiRef.current.addBlock(blockId, x, y, team);
+        tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
       }
     } else {
       toast({
@@ -72,22 +60,13 @@ export default function Home() {
     <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
       <Inventory onBlockClick={handleSpawnBlock} />
       <div 
-        className="flex-1 relative"
+        className="flex-1 relative bg-background"
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
-        <div
-            ref={scrollContainerRef}
-            className="absolute inset-0 overflow-auto bg-background"
-        >
-            <div style={{ 
-              transform: `scale(${zoom})`,
-              transformOrigin: '0 0',
-              width: `${100 / zoom}%`,
-              height: `${100 / zoom}%`,
-            }}>
-              <TetrisCanvas ref={tetrisCanvasApiRef} />
-            </div>
+        <TetrisCanvas ref={tetrisCanvasApiRef} />
+        <div className="absolute bottom-4 right-4 bg-black/50 text-white p-2 rounded-md text-xs pointer-events-none">
+          Use mouse wheel to zoom, and drag middle mouse button to pan.
         </div>
       </div>
     </div>
