@@ -15,7 +15,7 @@ export interface TetrisCanvasApi {
 const BLOCK_SIZE = 40;
 const MAX_DRAG_WEIGHT = 60;
 const BLOCK_WEIGHT = 40;
-const SPAWN_Y_OFFSET = 2500; // Spawn blocks lower in the canvas
+const SPAWN_Y_OFFSET = 29500; // Spawn blocks lower in the canvas
 
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
@@ -23,7 +23,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const renderRef = useRef<Matter.Render>();
   const mouseRef = useRef<Matter.Mouse>();
   const mouseConstraintRef = useRef<Matter.MouseConstraint>();
-  const [canvasSize, setCanvasSize] = useState({ width: 10000, height: 3000 });
+  const [canvasSize, setCanvasSize] = useState({ width: 100000, height: 30000 });
   const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
   const zoomRef = useRef(0.5);
   const bodiesRef = useRef<Matter.Body[]>([]);
@@ -31,7 +31,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
   useEffect(() => {
     const newStars = [];
-    for (let i = 0; i < 1200; i++) {
+    // Increase star count for the larger canvas
+    for (let i = 0; i < 20000; i++) {
       newStars.push({
         x: Math.random() * canvasSize.width,
         y: Math.random() * canvasSize.height,
