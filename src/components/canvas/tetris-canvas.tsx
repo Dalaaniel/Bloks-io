@@ -29,12 +29,14 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   
   const [canvasSize] = useState({ width: 100000, height: 30000 });
   
-  const { zoom, setZoom } = useInventory();
+  const { zoom, setZoom, team } = useInventory();
   
   const dragModeRef = useRef<DragMode>('none');
   const lastMousePosition = useRef({ x: 0, y: 0 });
   const viewCenter = useRef({ x: canvasSize.width / 2, y: canvasSize.height - 1000 });
   const zoomStartRef = useRef({ y: 0, zoom: 1 });
+  
+  const initialOverlapWhitelistRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     const starsCanvas = starsCanvasRef.current;
@@ -99,9 +101,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     Matter.Render.lookAt(render, bounds);
 
     // Sync stars canvas transform
-    if (starsCanvasRef.current) {
-        const parentWidth = render.options.width!;
-        const parentHeight = render.options.height!;
+    if (starsCanvasRef.current && render.options.width && render.options.height) {
+        const parentWidth = render.options.width;
+        const parentHeight = render.options.height;
         const originX = parentWidth / 2;
         const originY = parentHeight / 2;
         const translateX = -viewCenter.current.x * zoom + originX;
@@ -128,21 +130,21 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     },
     getViewportCoordinates: (x, y) => {
         const render = renderRef.current;
-        if (!render) return { x: 0, y: 0 };
+        if (!render || !render.options.width || !render.options.height) return { x: 0, y: 0 };
         
         const view = render.bounds;
-        const worldX = view.min.x + (x / render.options.width!) * (view.max.x - view.min.x);
-        const worldY = view.min.y + (y / render.options.height!) * (view.max.y - view.min.y);
+        const worldX = view.min.x + (x / render.options.width) * (view.max.x - view.min.x);
+        const worldY = view.min.y + (y / render.options.height) * (view.max.y - view.min.y);
 
         return { x: worldX, y: worldY };
     },
     resetView: () => {
         const render = renderRef.current;
-        if (!render) return;
+        if (!render || !render.options.width || !render.options.height) return;
 
         // Calculate the center point to show the top-left corner
-        const viewportWidth = render.options.width! / zoom;
-        const viewportHeight = render.options.height! / zoom;
+        const viewportWidth = render.options.width / zoom;
+        const viewportHeight = render.options.height / zoom;
         
         viewCenter.current = {
             x: viewportWidth / 2,
@@ -161,7 +163,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint } = Matter;
+    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events } = Matter;
 
     const engine = Engine.create({ gravity: { y: 0.4 } });
     engineRef.current = engine;
@@ -203,6 +205,73 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     Runner.run(runner, engine);
     
     updateCamera();
+    
+    // --- Custom Drag Interruption Logic ---
+
+    Events.on(mouseConstraint, 'mousedown', () => {
+        if (mouseConstraint.body) {
+            const draggedBody = mouseConstraint.body;
+            const allOtherBodies = Composite.allBodies(engine.world).filter(
+                body => body.id !== draggedBody.id && !body.isStatic
+            );
+            
+            initialOverlapWhitelistRef.current.clear();
+            
+            allOtherBodies.forEach(otherBody => {
+                const fictiveBounds = {
+                    min: {
+                        x: otherBody.bounds.min.x - (otherBody.bounds.max.x - otherBody.bounds.min.x) * 0.5,
+                        y: otherBody.bounds.min.y - (otherBody.bounds.max.y - otherBody.bounds.min.y) * 0.5,
+                    },
+                    max: {
+                        x: otherBody.bounds.max.x + (otherBody.bounds.max.x - otherBody.bounds.min.x) * 0.5,
+                        y: otherBody.bounds.max.y + (otherBody.bounds.max.y - otherBody.bounds.min.y) * 0.5,
+                    }
+                };
+                if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
+                    initialOverlapWhitelistRef.current.add(otherBody.id);
+                }
+            });
+        }
+    });
+
+    Events.on(mouseConstraint, 'mouseup', () => {
+        initialOverlapWhitelistRef.current.clear();
+    });
+
+    Events.on(engine, 'beforeUpdate', () => {
+        if (mouseConstraint.body) {
+            const draggedBody = mouseConstraint.body;
+            const allOtherBodies = Composite.allBodies(engine.world).filter(
+                body => body.id !== draggedBody.id && !body.isStatic
+            );
+
+            for (const otherBody of allOtherBodies) {
+                if (initialOverlapWhitelistRef.current.has(otherBody.id)) {
+                    continue; // Skip check for whitelisted bodies
+                }
+
+                const fictiveBounds = {
+                    min: {
+                        x: otherBody.bounds.min.x - (otherBody.bounds.max.x - otherBody.bounds.min.x) * 0.5,
+                        y: otherBody.bounds.min.y - (otherBody.bounds.max.y - otherBody.bounds.min.y) * 0.5,
+                    },
+                    max: {
+                        x: otherBody.bounds.max.x + (otherBody.bounds.max.x - otherBody.bounds.min.x) * 0.5,
+                        y: otherBody.bounds.max.y + (otherBody.bounds.max.y - otherBody.bounds.min.y) * 0.5,
+                    }
+                };
+
+                if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
+                    // Interrupt the drag
+                    mouseConstraint.body = null;
+                    break; 
+                }
+            }
+        }
+    });
+    
+    // --- End Custom Logic ---
 
     const handleResize = () => {
       if (renderRef.current && sceneRef.current?.parentElement) {
@@ -214,6 +283,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     
     window.addEventListener('resize', handleResize);
 
+    const { Composite, Bounds } = Matter;
     return () => {
       window.removeEventListener('resize', handleResize);
       Render.stop(render);
@@ -241,16 +311,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         zoomStartRef.current = { y: e.clientY, zoom };
         return;
     }
-
-    // If we're not grabbing a body, we might be panning.
-    // We check this with a slight delay to let Matter.js pick up the body first.
+    
     setTimeout(() => {
       if (mc && mc.body) {
-        // A body is being dragged, so do nothing.
         dragModeRef.current = 'none';
         return;
       }
-      // No body is being dragged, start panning.
       dragModeRef.current = 'panning';
       lastMousePosition.current = { x: e.clientX, y: e.clientY };
     }, 0);
@@ -259,6 +325,11 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const handleMouseMove = (e: React.MouseEvent) => {
     e.preventDefault();
     
+    const mc = mouseConstraintRef.current;
+    if (mc && mc.body) { // If a block is being dragged by matter, don't pan.
+        dragModeRef.current = 'none';
+    }
+
     if (dragModeRef.current === 'panning') {
       const dx = e.clientX - lastMousePosition.current.x;
       const dy = e.clientY - lastMousePosition.current.y;
@@ -336,3 +407,5 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
+
+    
