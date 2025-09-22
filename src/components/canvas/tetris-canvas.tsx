@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import Matter, { IEventCollision, type Body } from 'matter-js';
+import Matter, { IEventCollision, type Body, Bounds } from 'matter-js';
 import { getBlockById, type Team } from '@/lib/blocks';
 import { useInventory } from '@/context/inventory-context';
 
@@ -25,7 +25,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const engineRef = useRef<Matter.Engine>();
   const renderRef = useRef<Matter.Render>();
   const mouseRef = useRef<Matter.Mouse>();
-  const mouseConstraintRef = useRef<Matter.MouseConstraint | undefined>();
+  const mouseConstraintRef = useRef<Matter.MouseConstraint>();
   
   const [canvasSize] = useState({ width: 100000, height: 30000 });
   
@@ -161,7 +161,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events, Composite, Bounds } = Matter;
+    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events, Composite } = Matter;
 
     const engine = Engine.create({ gravity: { y: 0.4 } });
     engineRef.current = engine;
@@ -233,9 +233,10 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     });
 
     Events.on(engine, 'beforeUpdate', () => {
-        if (!mouseConstraintRef.current?.body) return;
+        const mc = mouseConstraintRef.current;
+        if (!mc || !mc.body) return;
 
-        const draggedBody = mouseConstraintRef.current.body;
+        const draggedBody = mc.body;
         const allOtherBodies = Composite.allBodies(engine.world).filter(
             (body: Body) => body.id !== draggedBody.id && !body.isStatic
         );
@@ -252,10 +253,10 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
                 min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
                 max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
             };
-
+            
             if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
-                mouseConstraintRef.current.body = undefined;
-                break; 
+                 mc.body = undefined;
+                 break; 
             }
         }
     });
@@ -311,12 +312,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const handleMouseMove = (e: React.MouseEvent) => {
     e.preventDefault();
     
-    const mc = mouseConstraintRef.current;
-    if (mc && mc.body) { 
-        dragModeRef.current = 'none';
-    }
-
     if (dragModeRef.current === 'panning') {
+      const mc = mouseConstraintRef.current;
+      if (mc && mc.body) {
+          dragModeRef.current = 'none';
+          return;
+      }
       const dx = e.clientX - lastMousePosition.current.x;
       const dy = e.clientY - lastMousePosition.current.y;
       
