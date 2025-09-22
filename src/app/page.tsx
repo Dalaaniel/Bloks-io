@@ -1,17 +1,22 @@
 "use client";
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useInventory } from '@/context/inventory-context';
 import Inventory from '@/components/canvas/inventory';
 import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-canvas';
 import { useToast } from '@/hooks/use-toast';
-import { Slider } from '@/components/ui/slider';
 
 export default function Home() {
-  const { useBlock, team } = useInventory();
+  const { useBlock, team, zoom } = useInventory();
   const { toast } = useToast();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
+
+  useEffect(() => {
+    if (tetrisCanvasApiRef.current) {
+      tetrisCanvasApiRef.current.setZoom(zoom);
+    }
+  }, [zoom]);
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -22,9 +27,9 @@ export default function Home() {
     if (useBlock(blockId)) {
       if (tetrisCanvasApiRef.current && scrollContainerRef.current) {
         const scrollRect = scrollContainerRef.current.getBoundingClientRect();
-        const zoom = tetrisCanvasApiRef.current.getZoom();
-        const x = (event.clientX - scrollRect.left + scrollContainerRef.current.scrollLeft) / zoom;
-        const y = (event.clientY - scrollRect.top + scrollContainerRef.current.scrollTop) / zoom;
+        const currentZoom = tetrisCanvasApiRef.current.getZoom();
+        const x = (event.clientX - scrollRect.left + scrollContainerRef.current.scrollLeft) / currentZoom;
+        const y = (event.clientY - scrollRect.top + scrollContainerRef.current.scrollTop) / currentZoom;
         tetrisCanvasApiRef.current.addBlock(blockId, x, y, team);
       }
     } else {
@@ -53,34 +58,17 @@ export default function Home() {
     event.preventDefault();
   };
 
-  const handleZoomChange = (value: number[]) => {
-    if (tetrisCanvasApiRef.current) {
-      tetrisCanvasApiRef.current.setZoom(value[0]);
-    }
-  };
-
   return (
-    <div className="flex h-full">
+    <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
       <Inventory onBlockClick={handleSpawnBlock} />
-      <div className="flex-1 flex flex-col relative bg-background">
+      <div className="flex-1 relative bg-background">
           <div
               ref={scrollContainerRef}
-              className="flex-1 overflow-auto"
+              className="absolute inset-0 overflow-auto"
               onDrop={handleDrop}
               onDragOver={handleDragOver}
           >
               <TetrisCanvas ref={tetrisCanvasApiRef} />
-          </div>
-          <div className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center p-4 bg-black/30">
-              <Slider
-                  defaultValue={[0.5]}
-                  min={0.1}
-                  max={2}
-                  step={0.05}
-                  orientation="vertical"
-                  onValueChange={handleZoomChange}
-                  className="h-64"
-              />
           </div>
       </div>
     </div>

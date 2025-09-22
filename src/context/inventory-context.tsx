@@ -6,6 +6,8 @@ import { type Team } from '@/lib/blocks';
 interface InventoryContextType {
   ownedBlocks: { [key: string]: number };
   team: Team | null;
+  zoom: number;
+  setZoom: (zoom: number) => void;
   addBlock: (blockId: string) => void;
   useBlock: (blockId: string) => boolean;
 }
@@ -17,6 +19,7 @@ export const InventoryProvider = ({ children }: { children: ReactNode }) => {
     i: 5, o: 5, t: 5, l: 5, j: 5, s: 5, z: 5,
   });
   const [team, setTeam] = useState<Team | null>(null);
+  const [zoom, setZoom] = useState(0.5);
 
   useEffect(() => {
     // Randomly assign a team on initial load
@@ -41,7 +44,7 @@ export const InventoryProvider = ({ children }: { children: ReactNode }) => {
     return false;
   }, [ownedBlocks]);
 
-  const value = { ownedBlocks, team, addBlock, useBlock };
+  const value = { ownedBlocks, team, addBlock, useBlock, zoom, setZoom };
 
   return (
     <InventoryContext.Provider value={value}>
