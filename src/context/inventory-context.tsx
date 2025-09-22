@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
@@ -10,6 +11,7 @@ interface InventoryContextType {
   setZoom: (zoom: number) => void;
   addBlock: (blockId: string) => void;
   useBlock: (blockId: string) => boolean;
+  returnBlock: (blockId: string) => void;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -44,7 +46,14 @@ export const InventoryProvider = ({ children }: { children: ReactNode }) => {
     return false;
   }, [ownedBlocks]);
 
-  const value = { ownedBlocks, team, addBlock, useBlock, zoom, setZoom };
+  const returnBlock = useCallback((blockId: string) => {
+    setOwnedBlocks(prev => ({
+      ...prev,
+      [blockId]: (prev[blockId] || 0) + 1,
+    }));
+  }, []);
+
+  const value = { ownedBlocks, team, addBlock, useBlock, returnBlock, zoom, setZoom };
 
   return (
     <InventoryContext.Provider value={value}>

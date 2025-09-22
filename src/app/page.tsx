@@ -8,30 +8,47 @@ import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-c
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { CornerUpLeft } from 'lucide-react';
+import { type Body } from 'matter-js';
 
 export default function Home() {
-  const { useBlock, team } = useInventory();
+  const { useBlock, returnBlock, team } = useInventory();
   const { toast } = useToast();
   const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    if (!team) return;
+    if (!team || !tetrisCanvasApiRef.current) return;
     const blockId = event.dataTransfer.getData("application/tetris-block");
     if (!blockId) return;
 
-    if (useBlock(blockId)) {
-      if (tetrisCanvasApiRef.current) {
-        const canvasRect = event.currentTarget.getBoundingClientRect();
-        // Get mouse position relative to the canvas element
-        const xOnElement = event.clientX - canvasRect.left;
-        const yOnElement = event.clientY - canvasRect.top;
+    const canvasRect = event.currentTarget.getBoundingClientRect();
+    const xOnElement = event.clientX - canvasRect.left;
+    const yOnElement = event.clientY - canvasRect.top;
+    const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
+    
+    // Define the "fictive area" for checking - e.g., an 80x80 box
+    const checkSize = 80;
+    const checkBounds = {
+      min: { x: worldCoords.x - checkSize / 2, y: worldCoords.y - checkSize / 2 },
+      max: { x: worldCoords.x + checkSize / 2, y: worldCoords.y + checkSize / 2 }
+    };
 
-        // Ask the canvas to convert element coordinates to world coordinates
-        const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
-        
+    const bodiesInArea = tetrisCanvasApiRef.current.getBodiesInRegion(checkBounds);
+    
+    // Filter out the static ground body
+    const blocksInArea = bodiesInArea.filter((body: Body) => !body.isStatic);
+
+    if (blocksInArea.length > 0) {
+      toast({
+        title: "Placement Invalid",
+        description: "Too close to another block. Find an empty space.",
+        variant: "destructive",
+      });
+      return; // Stop the drop
+    }
+
+    if (useBlock(blockId)) {
         tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
-      }
     } else {
       toast({
         title: "Out of Blocks",

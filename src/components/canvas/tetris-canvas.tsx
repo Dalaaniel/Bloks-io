@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import Matter from 'matter-js';
+import Matter, { IEventCollision } from 'matter-js';
 import { getBlockById, type Team } from '@/lib/blocks';
 import { useInventory } from '@/context/inventory-context';
 
@@ -11,6 +11,7 @@ export interface TetrisCanvasApi {
   spawnBlockForTeam: (blockId: string, team: Team) => void;
   getViewportCoordinates: (x: number, y: number) => { x: number, y: number };
   resetView: () => void;
+  getBodiesInRegion: (bounds: Matter.Bounds) => Matter.Body[];
 }
 
 const BLOCK_WEIGHT = 40;
@@ -148,6 +149,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
             y: viewportHeight / 2,
         };
         updateCamera();
+    },
+    getBodiesInRegion: (bounds) => {
+      const engine = engineRef.current;
+      if (!engine) return [];
+      const allBodies = Matter.Composite.allBodies(engine.world);
+      return Matter.Query.region(allBodies, bounds);
     }
   }));
 
@@ -228,21 +235,22 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
     const mc = mouseConstraintRef.current;
     
+    // Check if we are holding ctrl for zooming
     if (e.ctrlKey) {
         dragModeRef.current = 'zooming';
         zoomStartRef.current = { y: e.clientY, zoom };
         return;
     }
 
-    // Delay setting pan mode to allow Matter.js to pick up the body first
+    // If we're not grabbing a body, we might be panning.
+    // We check this with a slight delay to let Matter.js pick up the body first.
     setTimeout(() => {
-      // Re-check after a tick. If mouse constraint is dragging a body, don't pan.
       if (mc && mc.body) {
+        // A body is being dragged, so do nothing.
         dragModeRef.current = 'none';
         return;
       }
-      
-      // If no body is being dragged, start panning
+      // No body is being dragged, start panning.
       dragModeRef.current = 'panning';
       lastMousePosition.current = { x: e.clientX, y: e.clientY };
     }, 0);
