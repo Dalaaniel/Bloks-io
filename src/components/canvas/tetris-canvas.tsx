@@ -15,7 +15,7 @@ export interface TetrisCanvasApi {
 const BLOCK_SIZE = 40;
 const MAX_DRAG_WEIGHT = 60;
 const BLOCK_WEIGHT = 40;
-const SPAWN_Y_OFFSET = -100;
+const SPAWN_Y_OFFSET = 2500; // Spawn blocks lower in the canvas
 
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
@@ -109,14 +109,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     },
     setZoom: (zoom) => {
         zoomRef.current = zoom;
-        const render = renderRef.current;
-        const scene = sceneRef.current;
         const mouse = mouseRef.current;
-        if (!render || !scene || !mouse) return;
-        
-        scene.style.transform = `scale(${zoom})`;
-        scene.style.transformOrigin = '0 0';
-
+        if (!mouse) return;
         Matter.Mouse.setScale(mouse, { x: 1 / zoom, y: 1 / zoom });
     },
     getZoom: () => zoomRef.current,
@@ -221,12 +215,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     const runner = Runner.create();
     Runner.run(runner, engine);
     
-    const initialZoom = zoomRef.current;
-    if (sceneRef.current) {
-        sceneRef.current.style.transform = `scale(${initialZoom})`;
-        sceneRef.current.style.transformOrigin = '0 0';
-    }
-    Matter.Mouse.setScale(mouse, { x: 1 / initialZoom, y: 1 / initialZoom });
+    Matter.Mouse.setScale(mouse, { x: 1 / zoomRef.current, y: 1 / zoomRef.current });
 
     return () => {
       Render.stop(render);

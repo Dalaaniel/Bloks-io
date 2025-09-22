@@ -14,12 +14,6 @@ export default function Home() {
   const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
 
   useEffect(() => {
-    if (tetrisCanvasApiRef.current) {
-      tetrisCanvasApiRef.current.setZoom(zoom);
-    }
-  }, [zoom]);
-
-  useEffect(() => {
     // Scroll to the center of the canvas on initial load
     if (scrollContainerRef.current) {
       const { scrollWidth, scrollHeight, clientWidth, clientHeight } = scrollContainerRef.current;
@@ -36,10 +30,16 @@ export default function Home() {
 
     if (useBlock(blockId)) {
       if (tetrisCanvasApiRef.current && scrollContainerRef.current) {
+        // The canvas is scaled, so we need to adjust the drop coordinates.
+        // We get the mouse position relative to the scroll container.
         const scrollRect = scrollContainerRef.current.getBoundingClientRect();
-        const currentZoom = tetrisCanvasApiRef.current.getZoom();
-        const x = (event.clientX - scrollRect.left + scrollContainerRef.current.scrollLeft) / currentZoom;
-        const y = (event.clientY - scrollRect.top + scrollContainerRef.current.scrollTop) / currentZoom;
+        const xOnContainer = event.clientX - scrollRect.left;
+        const yOnContainer = event.clientY - scrollRect.top;
+
+        // We then translate that into coordinates on the scaled canvas.
+        const x = (xOnContainer + scrollContainerRef.current.scrollLeft) / zoom;
+        const y = (yOnContainer + scrollContainerRef.current.scrollTop) / zoom;
+        
         tetrisCanvasApiRef.current.addBlock(blockId, x, y, team);
       }
     } else {
@@ -71,15 +71,24 @@ export default function Home() {
   return (
     <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
       <Inventory onBlockClick={handleSpawnBlock} />
-      <div className="flex-1 relative bg-background">
-          <div
-              ref={scrollContainerRef}
-              className="absolute inset-0 overflow-auto"
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-          >
+      <div 
+        className="flex-1 relative"
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+      >
+        <div
+            ref={scrollContainerRef}
+            className="absolute inset-0 overflow-auto bg-background"
+        >
+            <div style={{ 
+              transform: `scale(${zoom})`,
+              transformOrigin: '0 0',
+              width: `${100 / zoom}%`,
+              height: `${100 / zoom}%`,
+            }}>
               <TetrisCanvas ref={tetrisCanvasApiRef} />
-          </div>
+            </div>
+        </div>
       </div>
     </div>
   );
