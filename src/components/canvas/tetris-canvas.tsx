@@ -19,13 +19,13 @@ type DragMode = 'none' | 'panning' | 'zooming';
 
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
+  const starsCanvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine>();
   const renderRef = useRef<Matter.Render>();
   const mouseRef = useRef<Matter.Mouse>();
   const mouseConstraintRef = useRef<Matter.MouseConstraint>();
   
   const [canvasSize] = useState({ width: 100000, height: 30000 });
-  const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
   
   const { zoom, setZoom } = useInventory();
   
@@ -35,15 +35,24 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const zoomStartRef = useRef({ y: 0, zoom: 1 });
 
   useEffect(() => {
-    const newStars = [];
+    const starsCanvas = starsCanvasRef.current;
+    if (!starsCanvas) return;
+    
+    starsCanvas.width = canvasSize.width;
+    starsCanvas.height = canvasSize.height;
+
+    const ctx = starsCanvas.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.fillStyle = 'white';
     for (let i = 0; i < 20000; i++) {
-      newStars.push({
-        x: Math.random() * canvasSize.width,
-        y: Math.random() * canvasSize.height,
-        radius: Math.random() * 1.5,
-      });
+      const x = Math.random() * canvasSize.width;
+      const y = Math.random() * canvasSize.height;
+      const radius = Math.random() * 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
     }
-    setStars(newStars);
   }, [canvasSize.width, canvasSize.height]);
 
   const addBlock = (blockId: string, x: number, y: number, team: Team) => {
@@ -86,6 +95,18 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     };
     
     Matter.Render.lookAt(render, bounds);
+
+    // Sync stars canvas transform
+    if (starsCanvasRef.current) {
+        const parentWidth = render.options.width!;
+        const parentHeight = render.options.height!;
+        const originX = parentWidth / 2;
+        const originY = parentHeight / 2;
+        const translateX = -viewCenter.current.x * zoom + originX;
+        const translateY = -viewCenter.current.y * zoom + originY;
+
+        starsCanvasRef.current.style.transform = `translate(${translateX}px, ${translateY}px) scale(${zoom})`;
+    }
   };
 
   useImperativeHandle(ref, () => ({
@@ -266,23 +287,20 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         e.preventDefault();
       }}
     >
+       <canvas 
+        ref={starsCanvasRef} 
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          pointerEvents: 'none',
+          transformOrigin: '0 0'
+        }}
+      />
       <div 
         ref={sceneRef}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
       />
-      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-        <svg width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
-          <rect width="100%" height="100%" fill="transparent" />
-          {stars.map((star, i) => (
-            <circle key={i} cx={star.x} cy={star.y} r={star.radius} fill="white" 
-              style={{
-                transform: `translate(${-viewCenter.current.x * zoom + (renderRef.current?.options.width || 0) / 2}px, ${-viewCenter.current.y * zoom + (renderRef.current?.options.height || 0) / 2}px) scale(${zoom})`,
-                transformOrigin: `${viewCenter.current.x}px ${viewCenter.current.y}px`
-              }}
-            />
-          ))}
-        </svg>
-      </div>
     </div>
   );
 });
