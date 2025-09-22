@@ -211,6 +211,13 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     e.preventDefault();
     if (e.button !== 0) return; // Only for left mouse button
 
+    const mc = mouseConstraintRef.current;
+    if (mc && mc.body) {
+        // A block is being dragged, so don't initiate panning.
+        dragModeRef.current = 'none';
+        return;
+    }
+    
     if (e.ctrlKey) {
         dragModeRef.current = 'zooming';
         zoomStartRef.current = { y: e.clientY, zoom };
@@ -219,8 +226,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
     // Delay setting pan mode to allow Matter.js to pick up the body first
     setTimeout(() => {
-      const mc = mouseConstraintRef.current;
-      // If mouse constraint is dragging a body, don't pan
+      // Re-check after a tick. If mouse constraint is dragging a body, don't pan.
       if (mc && mc.body) {
         dragModeRef.current = 'none';
         return;
