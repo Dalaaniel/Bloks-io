@@ -1,7 +1,9 @@
-import { blocks } from '@/lib/blocks';
+import { getAllStoreBlocks } from '@/lib/blocks';
 import BlockCard from '@/components/store/block-card';
 
 export default function StorePage() {
+  const storeBlocks = getAllStoreBlocks();
+
   return (
     <main className="container py-8">
       <div className="mb-8 text-center">
@@ -11,7 +13,7 @@ export default function StorePage() {
         </p>
       </div>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {blocks.map(block => (
+        {storeBlocks.map(block => (
           <BlockCard key={block.id} block={block} />
         ))}
       </div>

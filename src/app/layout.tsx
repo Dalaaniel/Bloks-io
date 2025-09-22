@@ -23,9 +23,11 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <InventoryProvider>
-          <Header />
-          {children}
-          <Toaster />
+          <div className="flex flex-col h-screen">
+            <Header />
+            <main className="flex-1 relative">{children}</main>
+            <Toaster />
+          </div>
         </InventoryProvider>
       </body>
     </html>
