@@ -66,7 +66,7 @@ export default function Home() {
       >
         <TetrisCanvas ref={tetrisCanvasApiRef} />
         <div className="absolute bottom-4 right-4 bg-black/50 text-white p-2 rounded-md text-xs pointer-events-none">
-          Use mouse wheel to zoom, and drag middle mouse button to pan.
+          Drag background to pan. Hold Ctrl and drag vertically to zoom.
         </div>
       </div>
     </div>

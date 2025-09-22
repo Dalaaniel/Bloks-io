@@ -15,6 +15,8 @@ export interface TetrisCanvasApi {
 const BLOCK_WEIGHT = 40;
 const SPAWN_Y_OFFSET = 29500; // Spawn blocks lower in the canvas
 
+type DragMode = 'none' | 'panning' | 'zooming';
+
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Matter.Engine>();
@@ -26,12 +28,11 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const [stars, setStars] = useState<{x: number, y: number, radius: number}[]>([]);
   
   const { zoom, setZoom } = useInventory();
-  const bodiesRef = useRef<Matter.Body[]>([]);
-  const draggedBodyInfoRef = useRef<{ body: Matter.Body | null, initialCollisions: Set<Matter.Body> }>({ body: null, initialCollisions: new Set() });
-
-  const isPanning = useRef(false);
-  const lastPanPosition = useRef({ x: 0, y: 0 });
+  
+  const dragModeRef = useRef<DragMode>('none');
+  const lastMousePosition = useRef({ x: 0, y: 0 });
   const viewCenter = useRef({ x: canvasSize.width / 2, y: canvasSize.height - 1000 });
+  const zoomStartRef = useRef({ y: 0, zoom: 1 });
 
   useEffect(() => {
     const newStars = [];
@@ -68,12 +69,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         mass: BLOCK_WEIGHT,
     });
     
-    (compoundBody as any).sensor = null; // No sensor logic needed for drag-to-pan
-
     compoundBody.label = `block-${team}-${blockId}`;
     
     Matter.World.add(engine.world, [compoundBody]);
-    bodiesRef.current.push(compoundBody);
   };
   
   const updateCamera = () => {
@@ -126,7 +124,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     engineRef.current = engine;
     const world = engine.world;
     
-    // Use parent element size for the renderer
     const parentElement = sceneRef.current.parentElement!;
     const render = Render.create({
       element: sceneRef.current,
@@ -162,12 +159,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     const runner = Runner.create();
     Runner.run(runner, engine);
     
-    updateCamera(); // Initial camera position
+    updateCamera();
 
     const handleResize = () => {
       if (renderRef.current && sceneRef.current?.parentElement) {
         renderRef.current.options.width = sceneRef.current.parentElement.clientWidth;
-        renderRef.current.options.height = scene.current.parentElement.clientHeight;
+        renderRef.current.options.height = sceneRef.current.parentElement.clientHeight;
         updateCamera();
       }
     };
@@ -182,7 +179,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       Engine.clear(engine);
       if(render.canvas) render.canvas.remove();
       if(render.textures) render.textures = {};
-      bodiesRef.current = [];
     };
   }, [canvasSize.width, canvasSize.height]);
 
@@ -190,57 +186,63 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     updateCamera();
   }, [zoom]);
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const newZoom = Math.max(0.02, Math.min(2, zoom + delta * zoom));
-    
-    if (renderRef.current && mouseRef.current) {
-        const mousePosition = mouseRef.current.position;
-        const render = renderRef.current;
-        const view = render.bounds;
-
-        const worldX = view.min.x + (mousePosition.x / render.options.width!) * (view.max.x - view.min.x);
-        const worldY = view.min.y + (mousePosition.y / render.options.height!) * (view.max.y - view.min.y);
-
-        viewCenter.current.x = (viewCenter.current.x - worldX) * (newZoom / zoom) + worldX;
-        viewCenter.current.y = (viewCenter.current.y - worldY) * (newZoom / zoom) + worldY;
-    }
-    
-    setZoom(newZoom);
-  };
-
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 1) { // Middle mouse button
-      isPanning.current = true;
-      lastPanPosition.current = { x: e.clientX, y: e.clientY };
-      e.preventDefault();
+    e.preventDefault();
+    if (e.button !== 0) return; // Only for left mouse button
+
+    if (e.ctrlKey) {
+        dragModeRef.current = 'zooming';
+        zoomStartRef.current = { y: e.clientY, zoom };
+        return;
     }
+
+    const mc = mouseConstraintRef.current;
+    if (mc && mc.body) {
+      // A block is being dragged by MouseConstraint, do nothing.
+      dragModeRef.current = 'none';
+      return;
+    }
+
+    // No block under cursor, start panning
+    dragModeRef.current = 'panning';
+    lastMousePosition.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning.current) {
-      const dx = e.clientX - lastPanPosition.current.x;
-      const dy = e.clientY - lastPanPosition.current.y;
+    e.preventDefault();
+    
+    if (dragModeRef.current === 'panning') {
+      const dx = e.clientX - lastMousePosition.current.x;
+      const dy = e.clientY - lastMousePosition.current.y;
       
       viewCenter.current.x -= dx / zoom;
       viewCenter.current.y -= dy / zoom;
       
-      lastPanPosition.current = { x: e.clientX, y: e.clientY };
+      lastMousePosition.current = { x: e.clientX, y: e.clientY };
       updateCamera();
+    } else if (dragModeRef.current === 'zooming') {
+        const dy = e.clientY - zoomStartRef.current.y;
+        const zoomFactor = Math.pow(1.005, -dy);
+        const newZoom = Math.max(0.02, Math.min(2, zoomStartRef.current.zoom * zoomFactor));
+        setZoom(newZoom);
     }
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
-    if (e.button === 1) {
-      isPanning.current = false;
-    }
+    e.preventDefault();
+    dragModeRef.current = 'none';
   };
   
   const handleMouseLeave = () => {
-      isPanning.current = false;
+    dragModeRef.current = 'none';
   };
 
+  const getCursor = () => {
+    if (dragModeRef.current === 'panning' || dragModeRef.current === 'zooming') {
+      return 'grabbing';
+    }
+    return 'grab';
+  };
 
   return (
     <div
@@ -250,20 +252,21 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         position: 'relative',
         overflow: 'hidden',
         background: '#0a0a0a',
-        cursor: isPanning.current ? 'grabbing' : 'grab',
+        cursor: getCursor(),
       }}
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
-      onContextMenu={(e) => e.preventDefault()} // Prevent context menu on right click
+      onContextMenu={(e) => e.preventDefault()}
+      onWheel={(e) => { // Prevent default browser wheel zoom
+        e.preventDefault();
+      }}
     >
       <div 
         ref={sceneRef}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
       />
-       {/* This is a static SVG for background stars, not managed by Matter.js */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <svg width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
           <rect width="100%" height="100%" fill="transparent" />
