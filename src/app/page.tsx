@@ -71,6 +71,32 @@ export default function Home() {
     }
   };
 
+  const handleBlockTouchDrop = (blockId: string, clientX: number, clientY: number) => {
+    console.log("[touch drop] BLock:", blockId, "Position", clientX, clientY)
+    const canvas = tetrisCanvasApiRef.current?.canvasElement;
+    if (!canvas  || !team ) return;
+
+    // Now use the DOM element (e.g., to get bounding box)
+    const canvasRect = canvas.getBoundingClientRect();
+
+
+    // Calculate relative position inside canvas
+    const xOnElement = clientX - canvasRect.left;
+    const yOnElement = clientY - canvasRect.top;
+
+    const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
+
+    if (useBlock(blockId)) {
+      tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
+    } else {
+      toast({
+        title: "Out of Blocks",
+        description: "You've run out of this block. Visit the store to buy more!",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
   };
@@ -81,7 +107,8 @@ export default function Home() {
 
   return (
     <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
-      <Inventory onBlockClick={handleSpawnBlock} />
+      <Inventory onBlockClick={handleSpawnBlock} onBlockTouchDrop={handleBlockTouchDrop} />
+
       <div 
         className="flex-1 relative bg-background"
         onDrop={handleDrop}

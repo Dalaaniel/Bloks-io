@@ -12,6 +12,7 @@ export interface TetrisCanvasApi {
   getViewportCoordinates: (x: number, y: number) => { x: number, y: number };
   resetView: () => void;
   getBodiesInRegion: (bounds: Matter.Bounds) => Matter.Body[];
+  canvasElement: HTMLCanvasElement  | null; 
 }
 
 const BLOCK_WEIGHT = 40;
@@ -39,6 +40,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const lastMousePosition = useRef({ x: 0, y: 0 });
   const viewCenter = useRef({ x: canvasSize.width / 2, y: canvasSize.height - 1000 });
   const zoomStartRef = useRef({ y: 0, zoom: 1 });
+  const lastTouchPosition = useRef({ x: 0, y: 0 });
+  const pinchZoomStartRef = useRef<{ distance: number; zoom: number } | null>(null);
+
   
   useEffect(() => {
     const starsCanvas = starsCanvasRef.current;
@@ -163,7 +167,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       if (!engine) return [];
       const allBodies = Matter.Composite.allBodies(engine.world);
       return Matter.Query.region(allBodies, bounds);
-    }
+    },
+    canvasElement:  renderRef.current?.canvas ?? null,
   }));
 
   useEffect(() => {
@@ -340,6 +345,26 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     }, 0);
   };
 
+    const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const mc = mouseConstraintRef.current;
+      if (!mc?.body) {
+        // No block is being dragged → allow panning
+        dragModeRef.current = 'panning';
+        const touch = e.touches[0];
+        lastTouchPosition.current = { x: touch.clientX, y: touch.clientY };
+      }
+    } else if (e.touches.length === 2) {
+    // Pinch to zoom
+      dragModeRef.current = 'zooming';
+      const [t1, t2] = [e.touches[0], e.touches[1]];
+     const dx = t2.clientX - t1.clientX;
+      const dy = t2.clientY - t1.clientY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      pinchZoomStartRef.current = { distance, zoom };
+    }
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
     e.preventDefault();
     
@@ -365,6 +390,37 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     }
   };
 
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
+
+    const mc = mouseConstraintRef.current;
+
+    if (dragModeRef.current === 'panning' && e.touches.length === 1 && !mc?.body) {
+      const touch = e.touches[0];
+      const dx = touch.clientX - lastTouchPosition.current.x;
+      const dy = touch.clientY - lastTouchPosition.current.y;
+
+      viewCenter.current.x -= dx / zoom;
+      viewCenter.current.y -= dy / zoom;
+
+      lastTouchPosition.current = { x: touch.clientX, y: touch.clientY };
+      updateCamera();
+    } else if (dragModeRef.current === 'zooming' && e.touches.length === 2) {
+      const [t1, t2] = [e.touches[0], e.touches[1]];
+      const dx = t2.clientX - t1.clientX;
+      const dy = t2.clientY - t1.clientY;
+      const newDistance = Math.sqrt(dx * dx + dy * dy);
+
+      if (pinchZoomStartRef.current) {
+        const { distance: startDistance, zoom: startZoom } = pinchZoomStartRef.current;
+        const zoomFactor = newDistance / startDistance;
+        const newZoom = Math.max(0.02, Math.min(2, startZoom * zoomFactor));
+        setZoom(newZoom);
+      }
+    }
+  };
+
+
   const handleMouseUp = (e: React.MouseEvent) => {
     e.preventDefault();
     dragModeRef.current = 'none';
@@ -373,6 +429,15 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const handleMouseLeave = () => {
     dragModeRef.current = 'none';
   };
+
+  const handleTouchEnd = () => {
+    // When fingers are lifted
+    if ((dragModeRef.current === 'panning' || dragModeRef.current === 'zooming')) {
+      dragModeRef.current = 'none';
+      pinchZoomStartRef.current = null;
+    }
+  };
+
 
   const getCursor = () => {
     if (dragModeRef.current === 'panning') return 'grabbing';
@@ -399,6 +464,10 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       onContextMenu={(e) => e.preventDefault()}
       onWheel={(e) => { 
         e.preventDefault();
