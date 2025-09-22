@@ -1,5 +1,8 @@
+export type BlockId = 'i' | 'o' | 't' | 'l' | 'j' | 's' | 'z';
+export type Team = 'red' | 'blue';
+
 export interface TetrisBlock {
-  id: 'i' | 'o' | 't' | 'l' | 'j' | 's' | 'z';
+  id: BlockId;
   name: string;
   color: string;
   price: number;
@@ -9,11 +12,31 @@ export interface TetrisBlock {
 
 const BLOCK_SIZE = 40;
 
-export const blocks: TetrisBlock[] = [
+const teamColors: Record<Team, Record<BlockId, string>> = {
+  blue: {
+    i: '#00A8F0', // Light Blue
+    o: '#0060F0', // Medium Blue
+    t: '#0030F0', // Dark Blue
+    l: '#40A0FF', // Sky Blue
+    j: '#2080F8', // Royal Blue
+    s: '#60C0FF', // Baby Blue
+    z: '#1040E0', // Navy Blue
+  },
+  red: {
+    i: '#F00050', // Magenta
+    o: '#F04000', // Orange-Red
+    t: '#D00000', // Strong Red
+    l: '#FF6060', // Light Red
+    j: '#E02020', // Crimson
+    s: '#FF8080', // Salmon
+    z: '#B00000', // Maroon
+  }
+};
+
+const baseBlocks: Omit<TetrisBlock, 'color'>[] = [
   {
     id: 'i',
     name: 'I-Block',
-    color: '#00F0F0', // Cyan
     price: 100,
     vertices: [
       { x: 0, y: 0 }, { x: BLOCK_SIZE * 4, y: 0 },
@@ -29,7 +52,6 @@ export const blocks: TetrisBlock[] = [
   {
     id: 'o',
     name: 'O-Block',
-    color: '#F0F000', // Yellow
     price: 100,
     vertices: [
       { x: 0, y: 0 }, { x: BLOCK_SIZE * 2, y: 0 },
@@ -45,7 +67,6 @@ export const blocks: TetrisBlock[] = [
   {
     id: 't',
     name: 'T-Block',
-    color: '#A000F0', // Purple
     price: 50,
     vertices: [
         { x: 0, y: 0 }, { x: BLOCK_SIZE * 3, y: 0 }, { x: BLOCK_SIZE * 3, y: BLOCK_SIZE },
@@ -66,7 +87,6 @@ export const blocks: TetrisBlock[] = [
   {
     id: 'l',
     name: 'L-Block',
-    color: '#F0A000', // Orange
     price: 50,
     vertices: [
         { x: 0, y: 0 }, { x: BLOCK_SIZE * 2, y: 0 }, { x: BLOCK_SIZE * 2, y: BLOCK_SIZE * 3 },
@@ -86,7 +106,6 @@ export const blocks: TetrisBlock[] = [
   {
     id: 'j',
     name: 'J-Block',
-    color: '#0000F0', // Blue
     price: 50,
     vertices: [
         { x: 0, y: 0 }, { x: BLOCK_SIZE, y: 0 }, { x: BLOCK_SIZE, y: BLOCK_SIZE * 3 },
@@ -106,7 +125,6 @@ export const blocks: TetrisBlock[] = [
   {
     id: 's',
     name: 'S-Block',
-    color: '#00F000', // Green
     price: 75,
     vertices: [
         { x: 0, y: BLOCK_SIZE }, { x: BLOCK_SIZE, y: BLOCK_SIZE }, { x: BLOCK_SIZE, y: 0 },
@@ -128,7 +146,6 @@ export const blocks: TetrisBlock[] = [
   {
     id: 'z',
     name: 'Z-Block',
-    color: '#F00000', // Red
     price: 75,
     vertices: [
         { x: 0, y: 0 }, { x: BLOCK_SIZE * 2, y: 0 }, { x: BLOCK_SIZE * 2, y: BLOCK_SIZE },
@@ -148,4 +165,21 @@ export const blocks: TetrisBlock[] = [
   },
 ];
 
-export const getBlockById = (id: string): TetrisBlock | undefined => blocks.find(b => b.id === id);
+export const getAllStoreBlocks = (): TetrisBlock[] => {
+    // For the store, we can just show one color, e.g., blue
+    return baseBlocks.map(block => ({
+        ...block,
+        color: teamColors.blue[block.id]
+    }));
+}
+
+
+export const getBlockById = (id: string, team: Team): TetrisBlock | undefined => {
+    const baseBlock = baseBlocks.find(b => b.id === id);
+    if (!baseBlock) return undefined;
+
+    return {
+        ...baseBlock,
+        color: teamColors[team][baseBlock.id]
+    };
+};

@@ -1,12 +1,12 @@
-
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import Matter from 'matter-js';
-import { getBlockById, type TetrisBlock } from '@/lib/blocks';
+import { getBlockById, type Team, type TetrisBlock } from '@/lib/blocks';
 
 export interface TetrisCanvasApi {
-  addBlock: (blockId: string, x: number, y: number) => void;
+  addBlock: (blockId: string, x: number, y: number, team: Team) => void;
+  spawnBlockForTeam: (blockId: string, team: Team) => void;
   setZoom: (zoom: number) => void;
   getZoom: () => number;
 }
@@ -14,6 +14,7 @@ export interface TetrisCanvasApi {
 const BLOCK_SIZE = 40;
 const MAX_DRAG_WEIGHT = 60;
 const BLOCK_WEIGHT = 40;
+const SPAWN_Y_OFFSET = -100;
 
 const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
@@ -39,57 +40,67 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     setStars(newStars);
   }, [canvasSize.width, canvasSize.height]);
 
-  useImperativeHandle(ref, () => ({
-    addBlock: (blockId, x, y) => {
-        const blockData = getBlockById(blockId);
-        const engine = engineRef.current;
-        if (!blockData || !engine) return;
+  const addBlock = (blockId: string, x: number, y: number, team: Team) => {
+    const blockData = getBlockById(blockId, team);
+    const engine = engineRef.current;
+    if (!blockData || !engine) return;
 
-        const scale = 2;
+    const scale = 2;
 
-        const blockParts = blockData.parts.map(part => {
-            const vertices = part.map(p => ({ x: p.x * scale, y: p.y * scale }));
-            return Matter.Bodies.fromVertices(x, y, [vertices], {
-                render: {
-                    fillStyle: blockData.color,
-                    strokeStyle: 'rgba(0,0,0,0.2)',
-                    lineWidth: 2,
-                }
-            });
-        });
-
-        const compoundBody = Matter.Body.create({
-            parts: blockParts,
-            mass: BLOCK_WEIGHT,
-        });
-        
-        const bounds = compoundBody.bounds;
-        const width = bounds.max.x - bounds.min.x;
-        const height = bounds.max.y - bounds.min.y;
-        
-        const sensor = Matter.Bodies.rectangle(
-            compoundBody.position.x,
-            compoundBody.position.y,
-            width * 2,
-            height * 2,
-            {
-                isSensor: true,
-                isStatic: false, // Sensor moves with the body
-                render: {
-                    visible: false, // Make the sensor invisible
-                },
+    const blockParts = blockData.parts.map(part => {
+        const vertices = part.map(p => ({ x: p.x * scale, y: p.y * scale }));
+        return Matter.Bodies.fromVertices(x, y, [vertices], {
+            render: {
+                fillStyle: blockData.color,
+                strokeStyle: 'rgba(0,0,0,0.2)',
+                lineWidth: 2,
             }
-        );
+        });
+    });
 
-        // Link body and sensor
-        (compoundBody as any).sensor = sensor;
-        (sensor as any).parentBody = compoundBody;
+    const compoundBody = Matter.Body.create({
+        parts: blockParts,
+        mass: BLOCK_WEIGHT,
+    });
+    
+    const bounds = compoundBody.bounds;
+    const width = bounds.max.x - bounds.min.x;
+    const height = bounds.max.y - bounds.min.y;
+    
+    const sensor = Matter.Bodies.rectangle(
+        compoundBody.position.x,
+        compoundBody.position.y,
+        width * 2,
+        height * 2,
+        {
+            isSensor: true,
+            isStatic: false, 
+            render: {
+                visible: false,
+            },
+        }
+    );
 
-        compoundBody.label = `block-${blockId}`;
-        sensor.label = `sensor-for-block-${blockId}-${Date.now()}`;
+    (compoundBody as any).sensor = sensor;
+    (sensor as any).parentBody = compoundBody;
 
-        Matter.World.add(engine.world, [compoundBody, sensor]);
-        bodiesRef.current.push(compoundBody);
+    compoundBody.label = `block-${team}-${blockId}`;
+    sensor.label = `sensor-for-block-${blockId}-${Date.now()}`;
+
+    Matter.World.add(engine.world, [compoundBody, sensor]);
+    bodiesRef.current.push(compoundBody);
+  };
+
+  useImperativeHandle(ref, () => ({
+    addBlock: addBlock,
+    spawnBlockForTeam: (blockId, team) => {
+      const world = engineRef.current?.world;
+      if (!world) return;
+  
+      const spawnAreaWidth = canvasSize.width / 4;
+      const xSpawn = team === 'blue' ? spawnAreaWidth / 2 : canvasSize.width - spawnAreaWidth / 2;
+  
+      addBlock(blockId, xSpawn, SPAWN_Y_OFFSET, team);
     },
     setZoom: (zoom) => {
         zoomRef.current = zoom;
@@ -127,11 +138,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     });
     renderRef.current = render;
     
-    // Ground
     World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height - 30, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' } }));
-    // Left Wall
     World.add(world, Bodies.rectangle(-30, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
-    // Right Wall
     World.add(world, Bodies.rectangle(canvasSize.width + 30, canvasSize.height / 2, 60, canvasSize.height, { isStatic: true, render: { visible: false } }));
 
     const mouse = Mouse.create(render.canvas);
@@ -147,7 +155,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       },
     });
     mouseConstraintRef.current = mouseConstraint;
-
 
     Events.on(mouseConstraint, 'startdrag', (event: any) => {
         const draggedBody = event.body;
@@ -173,7 +180,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     });
 
     Events.on(engine, 'beforeUpdate', () => {
-        // Move sensors with their parent bodies
         bodiesRef.current.forEach(body => {
             const sensor = (body as any).sensor;
             if (sensor) {
@@ -195,7 +201,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
             for (const collision of collisions) {
                 const sensor = collision.bodyA === draggedBody ? collision.bodyB : collision.bodyA;
                 if (!initialCollisions.has(sensor)) {
-                    // New collision detected, stop the drag
                     mouseConstraint.constraint.bodyB = null;
                     (mouseConstraint as any).body = null;
                     draggedBodyInfoRef.current = { body: null, initialCollisions: new Set() };
@@ -218,7 +223,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         sceneRef.current.style.transformOrigin = '0 0';
     }
     Matter.Mouse.setScale(mouse, { x: 1 / initialZoom, y: 1 / initialZoom });
-
 
     return () => {
       Render.stop(render);
@@ -265,4 +269,3 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
-
