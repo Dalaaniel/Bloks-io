@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import Matter, { IEventCollision } from 'matter-js';
+import Matter, { IEventCollision, type Body } from 'matter-js';
 import { getBlockById, type Team } from '@/lib/blocks';
 import { useInventory } from '@/context/inventory-context';
 
@@ -15,7 +15,7 @@ export interface TetrisCanvasApi {
 }
 
 const BLOCK_WEIGHT = 40;
-const SPAWN_Y_OFFSET = 29500; // Spawn blocks lower in the canvas
+const SPAWN_Y_OFFSET = 29500;
 
 type DragMode = 'none' | 'panning' | 'zooming';
 
@@ -25,11 +25,11 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const engineRef = useRef<Matter.Engine>();
   const renderRef = useRef<Matter.Render>();
   const mouseRef = useRef<Matter.Mouse>();
-  const mouseConstraintRef = useRef<Matter.MouseConstraint>();
+  const mouseConstraintRef = useRef<Matter.MouseConstraint | undefined>();
   
   const [canvasSize] = useState({ width: 100000, height: 30000 });
   
-  const { zoom, setZoom, team } = useInventory();
+  const { zoom, setZoom } = useInventory();
   
   const dragModeRef = useRef<DragMode>('none');
   const lastMousePosition = useRef({ x: 0, y: 0 });
@@ -100,7 +100,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     
     Matter.Render.lookAt(render, bounds);
 
-    // Sync stars canvas transform
     if (starsCanvasRef.current && render.options.width && render.options.height) {
         const parentWidth = render.options.width;
         const parentHeight = render.options.height;
@@ -142,7 +141,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         const render = renderRef.current;
         if (!render || !render.options.width || !render.options.height) return;
 
-        // Calculate the center point to show the top-left corner
         const viewportWidth = render.options.width / zoom;
         const viewportHeight = render.options.height / zoom;
         
@@ -207,28 +205,27 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     updateCamera();
     
     Events.on(mouseConstraint, 'mousedown', () => {
-        if (mouseConstraint.body) {
-            const draggedBody = mouseConstraint.body;
-            const allOtherBodies = Composite.allBodies(engine.world).filter(
-                body => body.id !== draggedBody.id && !body.isStatic
-            );
+        if (!mouseConstraint.body) return;
+        const draggedBody = mouseConstraint.body;
+        const allOtherBodies = Composite.allBodies(engine.world).filter(
+            (body: Body) => body.id !== draggedBody.id && !body.isStatic
+        );
+        
+        initialOverlapWhitelistRef.current.clear();
+        
+        allOtherBodies.forEach(otherBody => {
+            const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
+            const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
             
-            initialOverlapWhitelistRef.current.clear();
+            const fictiveBounds = {
+                min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
+                max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
+            };
             
-            allOtherBodies.forEach(otherBody => {
-                const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
-                const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
-                
-                const fictiveBounds = {
-                    min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
-                    max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
-                };
-                
-                if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
-                    initialOverlapWhitelistRef.current.add(otherBody.id);
-                }
-            });
-        }
+            if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
+                initialOverlapWhitelistRef.current.add(otherBody.id);
+            }
+        });
     });
 
     Events.on(mouseConstraint, 'mouseup', () => {
@@ -236,35 +233,37 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     });
 
     Events.on(engine, 'beforeUpdate', () => {
-        if (mouseConstraint.body) {
-            const draggedBody = mouseConstraint.body;
-            const allOtherBodies = Composite.allBodies(engine.world).filter(
-                body => body.id !== draggedBody.id && !body.isStatic
-            );
+        if (!mouseConstraintRef.current?.body) return;
 
-            for (const otherBody of allOtherBodies) {
-                if (initialOverlapWhitelistRef.current.has(otherBody.id)) {
-                    continue; 
-                }
+        const draggedBody = mouseConstraintRef.current.body;
+        const allOtherBodies = Composite.allBodies(engine.world).filter(
+            (body: Body) => body.id !== draggedBody.id && !body.isStatic
+        );
 
-                const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
-                const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
+        for (const otherBody of allOtherBodies) {
+            if (initialOverlapWhitelistRef.current.has(otherBody.id)) {
+                continue; 
+            }
 
-                const fictiveBounds = {
-                    min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
-                    max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
-                };
+            const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
+            const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
 
-                if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
-                    mouseConstraint.body = null;
-                    break; 
-                }
+            const fictiveBounds = {
+                min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
+                max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
+            };
+
+            if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
+                mouseConstraintRef.current.body = undefined;
+                break; 
             }
         }
     });
     
     const handleResize = () => {
       if (renderRef.current && sceneRef.current?.parentElement) {
+        renderRef.current.canvas.width = sceneRef.current.parentElement.clientWidth;
+        renderRef.current.canvas.height = sceneRef.current.parentElement.clientHeight;
         renderRef.current.options.width = sceneRef.current.parentElement.clientWidth;
         renderRef.current.options.height = sceneRef.current.parentElement.clientHeight;
         updateCamera();
@@ -290,10 +289,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (e.button !== 0) return; // Only for left mouse button
+    if (e.button !== 0) return;
 
-    const mc = mouseConstraintRef.current;
-    
     if (e.ctrlKey) {
         dragModeRef.current = 'zooming';
         zoomStartRef.current = { y: e.clientY, zoom };
@@ -301,6 +298,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     }
     
     setTimeout(() => {
+      const mc = mouseConstraintRef.current;
       if (mc && mc.body) {
         dragModeRef.current = 'none';
         return;
@@ -345,9 +343,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   };
 
   const getCursor = () => {
-    if (dragModeRef.current === 'panning' || dragModeRef.current === 'zooming') {
-      return 'grabbing';
-    }
+    if (dragModeRef.current === 'panning') return 'grabbing';
+    if (dragModeRef.current === 'zooming') return 'ns-resize';
+    
     const mc = mouseConstraintRef.current;
     if (mc && mc.body) {
         return 'grabbing';
@@ -395,5 +393,3 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
-
-    
