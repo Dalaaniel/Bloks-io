@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useRef, useEffect } from 'react';
@@ -17,6 +18,15 @@ export default function Home() {
       tetrisCanvasApiRef.current.setZoom(zoom);
     }
   }, [zoom]);
+
+  useEffect(() => {
+    // Scroll to the center of the canvas on initial load
+    if (scrollContainerRef.current) {
+      const { scrollWidth, scrollHeight, clientWidth, clientHeight } = scrollContainerRef.current;
+      scrollContainerRef.current.scrollLeft = (scrollWidth - clientWidth) / 2;
+      scrollContainerRef.current.scrollTop = scrollHeight - clientHeight;
+    }
+  }, []);
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
