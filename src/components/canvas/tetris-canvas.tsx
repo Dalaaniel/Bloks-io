@@ -10,6 +10,7 @@ export interface TetrisCanvasApi {
   addBlock: (blockId: string, x: number, y: number, team: Team) => void;
   spawnBlockForTeam: (blockId: string, team: Team) => void;
   getViewportCoordinates: (x: number, y: number) => { x: number, y: number };
+  resetView: () => void;
 }
 
 const BLOCK_WEIGHT = 40;
@@ -133,6 +134,20 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
         const worldY = view.min.y + (y / render.options.height!) * (view.max.y - view.min.y);
 
         return { x: worldX, y: worldY };
+    },
+    resetView: () => {
+        const render = renderRef.current;
+        if (!render) return;
+
+        // Calculate the center point to show the top-left corner
+        const viewportWidth = render.options.width! / zoom;
+        const viewportHeight = render.options.height! / zoom;
+        
+        viewCenter.current = {
+            x: viewportWidth / 2,
+            y: viewportHeight / 2,
+        };
+        updateCamera();
     }
   }));
 
@@ -212,11 +227,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     if (e.button !== 0) return; // Only for left mouse button
 
     const mc = mouseConstraintRef.current;
-    if (mc && mc.body) {
-        // A block is being dragged, so don't initiate panning.
-        dragModeRef.current = 'none';
-        return;
-    }
     
     if (e.ctrlKey) {
         dragModeRef.current = 'zooming';
@@ -270,6 +280,10 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const getCursor = () => {
     if (dragModeRef.current === 'panning' || dragModeRef.current === 'zooming') {
       return 'grabbing';
+    }
+    const mc = mouseConstraintRef.current;
+    if (mc && mc.body) {
+        return 'grabbing';
     }
     return 'grab';
   };

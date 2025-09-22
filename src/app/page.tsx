@@ -6,6 +6,8 @@ import { useInventory } from '@/context/inventory-context';
 import Inventory from '@/components/canvas/inventory';
 import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-canvas';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { CornerUpLeft } from 'lucide-react';
 
 export default function Home() {
   const { useBlock, team } = useInventory();
@@ -55,6 +57,10 @@ export default function Home() {
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
   };
+  
+  const handleResetView = () => {
+    tetrisCanvasApiRef.current?.resetView();
+  };
 
   return (
     <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
@@ -65,6 +71,15 @@ export default function Home() {
         onDragOver={handleDragOver}
       >
         <TetrisCanvas ref={tetrisCanvasApiRef} />
+        <Button 
+          variant="outline" 
+          size="icon" 
+          className="absolute top-4 left-4 z-10"
+          onClick={handleResetView}
+          title="Reset to Top-Left"
+        >
+          <CornerUpLeft className="h-4 w-4" />
+        </Button>
         <div className="absolute bottom-4 right-4 bg-black/50 text-white p-2 rounded-md text-xs pointer-events-none">
           Drag background to pan. Hold Ctrl and drag vertically to zoom.
         </div>
