@@ -87,10 +87,10 @@ export default function Home() {
   const isPlacementInValidZone = (x: number, team: Team) => {
     if (!tetrisCanvasApiRef.current) return false;
     const { blueZone, redZone } = tetrisCanvasApiRef.current.getZones();
-    if (team === 'blue' && x > blueZone.max.x) {
+    if (team === 'blue' && x > redZone.min.x) {
         return false;
     }
-    if (team === 'red' && x < redZone.min.x) {
+    if (team === 'red' && x < blueZone.max.x) {
         return false;
     }
     return true;
