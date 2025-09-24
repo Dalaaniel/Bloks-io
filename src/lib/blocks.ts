@@ -1,3 +1,4 @@
+
 export type BlockId = 'i' | 'o' | 't' | 'l' | 'j' | 's' | 'z';
 export type Team = 'red' | 'blue';
 
@@ -33,7 +34,7 @@ const teamColors: Record<Team, Record<BlockId, string>> = {
   }
 };
 
-const baseBlocks: Omit<TetrisBlock, 'color'>[] = [
+export const baseBlocks: Omit<TetrisBlock, 'color'>[] = [
   {
     id: 'i',
     name: 'I-Block',
@@ -180,6 +181,6 @@ export const getBlockById = (id: string, team: Team): TetrisBlock | undefined =>
 
     return {
         ...baseBlock,
-        color: teamColors[team][baseBlock.id]
+        color: teamColors[team]?.[baseBlock.id as BlockId] || teamColors.blue[baseBlock.id as BlockId]
     };
 };

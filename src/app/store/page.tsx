@@ -1,20 +1,27 @@
 
 'use client';
 
-import { getAllStoreBlocks, type BlockId } from '@/lib/blocks';
+import { getBlockById, type BlockId, baseBlocks, type TetrisBlock } from '@/lib/blocks';
 import BlockCard from '@/components/store/block-card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { updateUserInventory, type UserInventory } from '@/services/auth-service';
+import { useMemo } from 'react';
 
 export default function StorePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  const storeBlocks = getAllStoreBlocks();
+  const storeBlocks = useMemo(() => {
+    if (!user) {
+      // Default to blue team colors if user is not logged in
+      return baseBlocks.map(block => getBlockById(block.id, 'blue')).filter(Boolean) as TetrisBlock[];
+    }
+    return baseBlocks.map(block => getBlockById(block.id, user.team)).filter(Boolean) as TetrisBlock[];
+  }, [user]);
 
   const handleBuyBlock = async (blockId: string) => {
     if (!user) {
@@ -34,9 +41,6 @@ export default function StorePage() {
 
     try {
       await updateUserInventory(user.uid, newInventory);
-      // The user object in context will be updated automatically by the onSnapshot listener,
-      // but for immediate UI feedback, we can optimistically update it or refetch.
-      // For now, the app relies on listeners but a manual refresh could be added to useAuth.
       toast({
         title: "Purchase Successful!",
         description: `A new block has been added to your inventory.`,
