@@ -436,12 +436,16 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
-      const mc = mouseConstraintRef.current;
-      if (!mc?.body) {
+      setTimeout(() => {
+        const mc = mouseConstraintRef.current;
+        if (mc && mc.body) {
+          dragModeRef.current = 'none';
+          return;
+        }
         dragModeRef.current = 'panning';
         const touch = e.touches[0];
         lastTouchPosition.current = { x: touch.clientX, y: touch.clientY };
-      }
+      }, 0);
     } else if (e.touches.length === 2) {
       dragModeRef.current = 'zooming';
       const [t1, t2] = [e.touches[0], e.touches[1]];
@@ -567,3 +571,5 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
+
+    
