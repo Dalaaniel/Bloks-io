@@ -45,10 +45,10 @@ export default function LoginPage() {
         throw new Error(data.error || 'An unexpected error occurred.');
       }
       
-      // On successful API call, the onAuthStateChanged listener in AuthProvider
-      // will pick up the change. The useEffect above will handle the redirect.
-      // For a quicker redirect, we can manually trigger it here.
-      router.push('/');
+      // On successful API call, we need to inform the client-side app.
+      // A full page reload is the most reliable way to ensure all contexts
+      // and SDKs are re-initialized with the new auth state.
+      window.location.href = '/';
 
     } catch (error: any) {
       toast({
@@ -60,6 +60,15 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // If auth is still loading, don't render the form to prevent flashes of content
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <main className="flex items-center justify-center min-h-screen bg-background">
