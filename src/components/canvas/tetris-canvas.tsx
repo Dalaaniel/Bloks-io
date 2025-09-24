@@ -246,13 +246,26 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
       },
     });
     renderRef.current = render;
-    World.add(world, Bodies.rectangle(CANVAS_SIZE.width / 2, CANVAS_SIZE.height - 30, CANVAS_SIZE.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' }, collisionFilter: { category: 0b0100 } }));
+    World.add(world, Bodies.rectangle(CANVAS_SIZE.width / 2, CANVAS_SIZE.height - 30, CANVAS_SIZE.width, 60, { 
+        isStatic: true, 
+        render: { fillStyle: '#2a2a2a' }, 
+        collisionFilter: { category: 0b0100, mask: 0 } 
+    }));
 
     // Visualize zones
     World.add(world, [
-        Bodies.rectangle(blueZoneEnd / 2, CANVAS_SIZE.height / 2, blueZoneEnd, CANVAS_SIZE.height, { isStatic: true, isSensor: true, render: { fillStyle: 'rgba(0, 0, 255, 0.05)' } }),
-        Bodies.rectangle(blueZoneEnd + (noManLandEnd - blueZoneEnd) / 2, CANVAS_SIZE.height / 2, noManLandEnd - blueZoneEnd, CANVAS_SIZE.height, { isStatic: true, isSensor: true, render: { fillStyle: 'rgba(128, 128, 128, 0.05)' } }),
-        Bodies.rectangle(noManLandEnd + (CANVAS_SIZE.width - noManLandEnd) / 2, CANVAS_SIZE.height / 2, CANVAS_SIZE.width - noManLandEnd, CANVAS_SIZE.height, { isStatic: true, isSensor: true, render: { fillStyle: 'rgba(255, 0, 0, 0.05)' } })
+        Bodies.rectangle(blueZoneEnd / 2, CANVAS_SIZE.height / 2, blueZoneEnd, CANVAS_SIZE.height, { 
+            isStatic: true, isSensor: true, render: { fillStyle: 'rgba(0, 0, 255, 0.05)' },
+            collisionFilter: { mask: 0 }
+        }),
+        Bodies.rectangle(blueZoneEnd + (noManLandEnd - blueZoneEnd) / 2, CANVAS_SIZE.height / 2, noManLandEnd - blueZoneEnd, CANVAS_SIZE.height, { 
+            isStatic: true, isSensor: true, render: { fillStyle: 'rgba(128, 128, 128, 0.05)' },
+            collisionFilter: { mask: 0 }
+        }),
+        Bodies.rectangle(noManLandEnd + (CANVAS_SIZE.width - noManLandEnd) / 2, CANVAS_SIZE.height / 2, CANVAS_SIZE.width - noManLandEnd, CANVAS_SIZE.height, { 
+            isStatic: true, isSensor: true, render: { fillStyle: 'rgba(255, 0, 0, 0.05)' },
+            collisionFilter: { mask: 0 }
+        })
     ]);
 
 
@@ -571,3 +584,5 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
+
+    
