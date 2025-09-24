@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -6,6 +7,8 @@ import { getBlockById, type Team } from "@/lib/blocks";
 import TetrisBlockComponent from "@/components/tetris-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 interface InventoryProps {
   onBlockClick: (blockId: string) => void;
@@ -13,7 +16,7 @@ interface InventoryProps {
 }
 
 export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryProps) {
-  const { ownedBlocks, team } = useAuth();
+  const { ownedBlocks, team, user } = useAuth();
 
   const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
   const [touchPosition, setTouchPosition] = useState<{ x: number; y: number } | null>(null);
@@ -54,14 +57,17 @@ export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryP
     })
     .filter((item) => item.block && item.quantity > 0);
 
-  if (!team) {
+  if (!user || !team) {
     return (
       <aside className="w-48 border-r bg-secondary/50 flex flex-col">
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold tracking-tight">Inventory</h2>
         </div>
-        <div className="p-4 text-center text-sm text-muted-foreground">
-          Please log in to see your inventory.
+        <div className="p-4 flex-1 flex flex-col items-center justify-center text-center text-sm text-muted-foreground">
+          <p className="mb-4">Please log in to see your inventory and place blocks.</p>
+          <Button asChild>
+            <Link href="/login">Login</Link>
+          </Button>
         </div>
       </aside>
     );

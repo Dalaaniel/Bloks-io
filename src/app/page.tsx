@@ -17,14 +17,20 @@ export default function Home() {
   const router = useRouter();
   const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [loading, user, router]);
+  const showLoginPrompt = () => {
+    toast({
+      title: "Login Required",
+      description: "Please log in to interact with the canvas.",
+      variant: "destructive",
+    });
+  };
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    if (!user) {
+      showLoginPrompt();
+      return;
+    }
     if (!team || !tetrisCanvasApiRef.current) return;
     const blockId = event.dataTransfer.getData("application/tetris-block");
     if (!blockId) return;
@@ -65,6 +71,10 @@ export default function Home() {
   };
 
   const handleSpawnBlock = (blockId: string) => {
+    if (!user) {
+      showLoginPrompt();
+      return;
+    }
     if (!team || !tetrisCanvasApiRef.current) return;
     if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current?.spawnBlockForTeam(blockId, team);
@@ -78,6 +88,10 @@ export default function Home() {
   };
 
   const handleBlockTouchDrop = (blockId: string, clientX: number, clientY: number) => {
+    if (!user) {
+      showLoginPrompt();
+      return;
+    }
     const canvas = tetrisCanvasApiRef.current?.canvasElement;
     if (!canvas  || !team || !tetrisCanvasApiRef.current) return;
 
@@ -106,7 +120,7 @@ export default function Home() {
     tetrisCanvasApiRef.current?.resetView();
   };
 
-  if (loading || !user) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader className="h-8 w-8 animate-spin" />
