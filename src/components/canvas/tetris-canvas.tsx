@@ -2,8 +2,9 @@
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import Matter, { IEventCollision, type Body, Bounds, Vector } from 'matter-js';
+import Matter, { IEventCollision, type Body, Bounds, Vector, Composite } from 'matter-js';
 import { getBlockById, type Team, type BlockId } from '@/lib/blocks';
+import { loadCanvasState, saveCanvasState } from '@/services/canvas-service';
 
 export interface TetrisCanvasApi {
   addBlock: (blockId: string, x: number, y: number, team: Team) => void;
@@ -22,7 +23,6 @@ interface CustomBody extends Body {
   initialOverlapWhitelist?: Set<number>;
 }
 
-// Dummy serialization interfaces for type consistency, not used for saving state anymore.
 export interface SerializedBody {
   id: number;
   label: string;
@@ -45,8 +45,6 @@ export interface SerializedBody {
 
 export interface SerializedCanvasState {
   bodies: SerializedBody[];
-  zoom: number;
-  viewCenter: { x: number; y: number };
 }
 
 
@@ -197,6 +195,23 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     canvasElement: renderRef.current?.canvas ?? null,
   }));
 
+  const deserializeBody = (sBody: SerializedBody, team: Team): Body => {
+    const [_, bodyTeam, blockId] = sBody.label.split('-');
+    const block = getBlockById(blockId, (bodyTeam as Team) || team);
+
+    const newBody = createBlockBody(blockId as BlockId, sBody.position.x, sBody.position.y, (bodyTeam as Team) || team);
+    if (!newBody) {
+      // Fallback for safety, though it should not happen if data is clean
+      return Bodies.rectangle(sBody.position.x, sBody.position.y, 80, 80);
+    }
+    
+    Matter.Body.setAngle(newBody, sBody.angle);
+    Matter.Body.setVelocity(newBody, sBody.velocity);
+    Matter.Body.setAngularVelocity(newBody, sBody.angularVelocity);
+    
+    return newBody;
+};
+
   useEffect(() => {
     if (!sceneRef.current) return;
     const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events, Composite } = Matter;
@@ -217,7 +232,43 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     });
     renderRef.current = render;
     World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height - 30, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' }, collisionFilter: { category: 0b0100 } }));
+
+    // Load canvas state from server
+    loadCanvasState().then(state => {
+        if (state && engineRef.current) {
+            const bodies = state.bodies.map(sBody => deserializeBody(sBody, team));
+            World.add(engineRef.current.world, bodies);
+        }
+    });
     
+    // Save state periodically
+    const saveInterval = setInterval(() => {
+      if (engineRef.current) {
+          const bodies = Composite.allBodies(engineRef.current.world)
+              .filter(body => !body.isStatic)
+              .map(body => ({
+                  id: body.id,
+                  label: body.label,
+                  position: body.position,
+                  angle: body.angle,
+                  vertices: body.vertices.map(v => ({ x: v.x, y: v.y })),
+                  velocity: body.velocity,
+                  angularVelocity: body.angularVelocity,
+                  isStatic: body.isStatic,
+                  parts: [], // Simplified for this example
+                  restitution: body.restitution,
+                  friction: body.friction,
+                  render: {
+                      fillStyle: body.render.fillStyle,
+                      strokeStyle: body.render.strokeStyle,
+                      lineWidth: body.render.lineWidth,
+                  }
+              }));
+
+          saveCanvasState({ bodies });
+      }
+    }, 5000); // Save every 5 seconds
+
 
     const mouse = Mouse.create(render.canvas);
     mouseRef.current = mouse;
@@ -295,6 +346,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     window.addEventListener('resize', handleResize);
 
     return () => {
+      clearInterval(saveInterval);
       window.removeEventListener('resize', handleResize);
       Render.stop(render);
       Runner.stop(runner);

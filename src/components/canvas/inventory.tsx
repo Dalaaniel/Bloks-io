@@ -6,6 +6,9 @@ import { getBlockById, type Team } from "@/lib/blocks";
 import TetrisBlockComponent from "@/components/tetris-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/context/auth-context";
+import { Button } from "../ui/button";
+import { useRouter } from "next/navigation";
 
 interface InventoryProps {
   ownedBlocks: { [key: string]: number };
@@ -15,17 +18,28 @@ interface InventoryProps {
 }
 
 export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouchDrop }: InventoryProps) {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
   const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
   const [touchPosition, setTouchPosition] = useState<{ x: number; y: number } | null>(null);
 
   const draggingBlock = draggingBlockId ? getBlockById(draggingBlockId, team) : undefined;
 
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>, blockId: string) => {
+    if (!user) {
+      event.preventDefault();
+      return;
+    }
     event.dataTransfer.setData("application/tetris-block", blockId);
     event.dataTransfer.effectAllowed = "move";
   };
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>, blockId: string) => {
+    if (!user) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     setDraggingBlockId(blockId);
     const touch = event.touches[0];
@@ -46,6 +60,12 @@ export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouc
     setDraggingBlockId(null);
     setTouchPosition(null);
   };
+  
+  const handleItemClick = (blockId: string) => {
+    if(user) {
+      onBlockClick(blockId);
+    }
+  }
 
   const availableBlocks = Object.entries(ownedBlocks)
     .map(([id, quantity]) => {
@@ -53,6 +73,56 @@ export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouc
       return { block, quantity };
     })
     .filter((item) => item.block && item.quantity > 0);
+  
+  const renderInventoryContent = () => {
+    if (loading) {
+      return (
+        <div className="p-4 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      );
+    }
+
+    if (!user) {
+       return (
+        <div className="p-4 text-center text-sm text-muted-foreground">
+          <p>Please log in to see your inventory and place blocks.</p>
+          <Button onClick={() => router.push('/login')} className="mt-4 w-full">
+            Log In
+          </Button>
+        </div>
+      );
+    }
+
+    if(availableBlocks.length === 0) {
+      return (
+         <div className="p-4 text-center text-sm text-muted-foreground">
+            Your inventory is empty. Visit the store to buy some blocks!
+          </div>
+      )
+    }
+
+    return availableBlocks.map(({ block, quantity }) => (
+      block && (
+        <div
+          key={block.id}
+          draggable={!!user}
+          onDragStart={(e) => handleDragStart(e, block.id)}
+          onClick={() => handleItemClick(block.id)}
+          onTouchStart={(e) => handleTouchStart(e, block.id)}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="p-2 rounded-lg cursor-pointer hover:bg-accent transition-colors flex flex-col items-center"
+        >
+          <div className="w-16 h-16">
+            <TetrisBlockComponent block={block} />
+          </div>
+          <span className="text-sm font-bold text-foreground">x{quantity}</span>
+        </div>
+      )
+    ));
+  }
+
 
   return (
     <aside className="w-48 border-r bg-secondary/50 flex flex-col relative">
@@ -61,36 +131,12 @@ export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouc
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-2">
-          {availableBlocks.length > 0 ? (
-            availableBlocks.map(({ block, quantity }) => (
-              block && (
-                <div
-                  key={block.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, block.id)}
-                  onClick={() => onBlockClick(block.id)}
-                  onTouchStart={(e) => handleTouchStart(e, block.id)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
-                  className="p-2 rounded-lg cursor-pointer hover:bg-accent transition-colors flex flex-col items-center"
-                >
-                  <div className="w-16 h-16">
-                    <TetrisBlockComponent block={block} />
-                  </div>
-                  <span className="text-sm font-bold text-foreground">x{quantity}</span>
-                </div>
-              )
-            ))
-          ) : (
-            <div className="p-4 text-center text-sm text-muted-foreground">
-              Your inventory is empty. Visit the store to buy some blocks!
-            </div>
-          )}
+          {renderInventoryContent()}
         </div>
       </ScrollArea>
       <Separator />
       <div className="p-4 text-xs text-muted-foreground">
-        Click or drag blocks onto the canvas.
+        { user ? 'Click or drag blocks onto the canvas.' : 'Log in to play.' }
       </div>
 
       {draggingBlock && touchPosition && (
