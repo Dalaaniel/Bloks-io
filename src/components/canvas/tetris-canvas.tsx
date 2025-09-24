@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
@@ -19,19 +17,6 @@ export interface TetrisCanvasApi {
 
 const BLOCK_WEIGHT = 40;
 const SPAWN_Y_OFFSET = 29500;
-const CANVAS_SIZE = { width: 100000, height: 30000 };
-
-const blueZoneEnd = CANVAS_SIZE.width * 0.2;
-const noManLandEnd = CANVAS_SIZE.width * 0.8;
-
-type Zone = 'blue' | 'no-man-land' | 'red';
-export const getTeamZone = (x: number): Zone => {
-  if (x < blueZoneEnd) return 'blue';
-  if (x < noManLandEnd) return 'no-man-land';
-  return 'red';
-};
-
-
 type DragMode = 'none' | 'panning' | 'zooming';
 
 const CANVAS_SIZE = { width: 100000, height: 30000 };
@@ -82,7 +67,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 
   const dragModeRef = useRef<DragMode>('none');
   const lastMousePosition = useRef({ x: 0, y: 0 });
-  const viewCenter = useRef({ x: CANVAS_SIZE.width / 2, y: CANVAS_SIZE.height - 1000 });
   const viewCenter = useRef({ x: CANVAS_SIZE.width / 2, y: CANVAS_SIZE.height - 1000 });
   const zoomStartRef = useRef({ y: 0, zoom: 1 });
   const lastTouchPosition = useRef({ x: 0, y: 0 });
@@ -194,43 +178,48 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     }
   };
 
-  useImperativeHandle(ref, () => ({
-    addBlock,
-    spawnBlockForTeam: (blockId, team) => {
-      const world = engineRef.current?.world;
-      if (!world) return;
-      let xSpawn;
-      if (team === 'blue') {
-        xSpawn = blueZoneEnd * 0.5; // Spawn in middle of blue zone
-      } else { // red team
-        xSpawn = noManLandEnd + (CANVAS_SIZE.width - noManLandEnd) * 0.5; // Spawn in middle of red zone
-      }
-      addBlock(blockId as BlockId, xSpawn, SPAWN_Y_OFFSET, team);
-    },
-    getViewportCoordinates: (x, y) => {
-      const render = renderRef.current;
-      if (!render || !render.options.width || !render.options.height) return { x: 0, y: 0 };
-      const view = render.bounds;
-      const worldX = view.min.x + (x / render.options.width) * (view.max.x - view.min.x);
-      const worldY = view.min.y + (y / render.options.height) * (view.max.y - view.min.y);
-      return { x: worldX, y: worldY };
-    },
-    resetView: () => {
-      const render = renderRef.current;
-      if (!render || !render.options.width || !render.options.height) return;
-      const viewportWidth = render.options.width / zoom;
-      const viewportHeight = render.options.height / zoom;
-      viewCenter.current = { x: viewportWidth / 2, y: viewportHeight / 2 };
-      updateCamera();
-    },
-    getBodiesInRegion: (bounds) => {
-      const engine = engineRef.current;
-      if (!engine) return [];
-      const allBodies = Matter.Composite.allBodies(engine.world);
-      return Matter.Query.region(allBodies, bounds);
-    },
-    canvasElement: renderRef.current?.canvas ?? null,
-  }));
+  useImperativeHandle(ref, () => {
+    const api: TetrisCanvasApi = {
+      addBlock,
+      spawnBlockForTeam: (blockId, team) => {
+        const world = engineRef.current?.world;
+        if (!world) return;
+        const targetZone = team === 'blue' ? blueZoneBounds : redZoneBounds;
+        const xSpawn = targetZone.min.x + Math.random() * (targetZone.max.x - targetZone.min.x);
+        addBlock(blockId as BlockId, xSpawn, SPAWN_Y_OFFSET, team);
+      },
+      getViewportCoordinates: (x, y) => {
+        const render = renderRef.current;
+        if (!render || !render.options.width || !render.options.height) return { x: 0, y: 0 };
+        const view = render.bounds;
+        const worldX = view.min.x + (x / render.options.width) * (view.max.x - view.min.x);
+        const worldY = view.min.y + (y / render.options.height) * (view.max.y - view.min.y);
+        return { x: worldX, y: worldY };
+      },
+      resetView: () => {
+        const render = renderRef.current;
+        if (!render || !render.options.width || !render.options.height) return;
+        const viewportWidth = render.options.width / zoom;
+        const viewportHeight = render.options.height / zoom;
+        viewCenter.current = { x: viewportWidth / 2, y: viewportHeight / 2 };
+        updateCamera();
+      },
+      getBodiesInRegion: (bounds) => {
+        const engine = engineRef.current;
+        if (!engine) return [];
+        const allBodies = Matter.Composite.allBodies(engine.world);
+        return Matter.Query.region(allBodies, bounds);
+      },
+      getZones: () => ({
+        blueZone: blueZoneBounds,
+        redZone: redZoneBounds,
+        noMansLand: noMansLandBounds,
+      }),
+      canvasElement: renderRef.current?.canvas ?? null,
+    };
+    apiRef.current = api;
+    return api;
+  }, [zoom, blueZoneBounds, redZoneBounds, noMansLandBounds]);
 
   const deserializeBody = (sBody: SerializedBody, team: Team): Body => {
     const [_, bodyTeam, blockId] = sBody.label.split('-');
@@ -269,29 +258,23 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
       },
     });
     renderRef.current = render;
-    World.add(world, Bodies.rectangle(CANVAS_SIZE.width / 2, CANVAS_SIZE.height - 30, CANVAS_SIZE.width, 60, { 
-        isStatic: true, 
-        render: { fillStyle: '#2a2a2a' }, 
-        collisionFilter: { category: 0b0100, mask: 0b1111 } 
-    }));
+    World.add(world, Bodies.rectangle(CANVAS_SIZE.width / 2, CANVAS_SIZE.height - 30, CANVAS_SIZE.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' }, collisionFilter: { category: 0b0100 } }));
 
-    // Visualize zones
-    World.add(world, [
-        Bodies.rectangle(blueZoneEnd / 2, CANVAS_SIZE.height / 2, blueZoneEnd, CANVAS_SIZE.height, { 
-            isStatic: true, isSensor: true, render: { fillStyle: 'rgba(0, 0, 255, 0.05)' },
-            collisionFilter: { mask: 0 }
-        }),
-        Bodies.rectangle(blueZoneEnd + (noManLandEnd - blueZoneEnd) / 2, CANVAS_SIZE.height / 2, noManLandEnd - blueZoneEnd, CANVAS_SIZE.height, { 
-            isStatic: true, isSensor: true, render: { fillStyle: 'rgba(128, 128, 128, 0.05)' },
-            collisionFilter: { mask: 0 }
-        }),
-        Bodies.rectangle(noManLandEnd + (CANVAS_SIZE.width - noManLandEnd) / 2, CANVAS_SIZE.height / 2, CANVAS_SIZE.width - noManLandEnd, CANVAS_SIZE.height, { 
-            isStatic: true, isSensor: true, render: { fillStyle: 'rgba(255, 0, 0, 0.05)' },
-            collisionFilter: { mask: 0 }
-        })
-    ]);
-
-
+    
+    const zoneRenderProps = {
+      isStatic: true,
+      isSensor: true, // Make it non-collidable with other physics bodies
+      collisionFilter: { // Make it invisible to the mouse
+          group: -1,
+          category: 0,
+          mask: 0,
+        }
+    };
+  
+    const blueZoneBody = Bodies.rectangle(blueZoneBounds.min.x + (blueZoneBounds.max.x - blueZoneBounds.min.x) / 2, CANVAS_SIZE.height / 2, blueZoneWidth, CANVAS_SIZE.height, { ...zoneRenderProps, render: { fillStyle: 'rgba(0, 0, 255, 0.1)' } });
+    const redZoneBody = Bodies.rectangle(redZoneBounds.min.x + (redZoneBounds.max.x - redZoneBounds.min.x) / 2, CANVAS_SIZE.height / 2, CANVAS_SIZE.width * 0.2, CANVAS_SIZE.height, { ...zoneRenderProps, render: { fillStyle: 'rgba(255, 0, 0, 0.1)' } });
+    World.add(world, [blueZoneBody, redZoneBody]);
+    
     // Load canvas state from server
     loadCanvasState().then(state => {
         if (state && engineRef.current) {
@@ -304,7 +287,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     const saveInterval = setInterval(() => {
       if (engineRef.current) {
           const bodies = Composite.allBodies(engineRef.current.world)
-              .filter(body => !body.isStatic && body.label.startsWith('block-'))
+              .filter(body => !body.isStatic)
               .map(body => ({
                   id: body.id,
                   label: body.label,
@@ -334,9 +317,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     const mouseConstraint = MouseConstraint.create(engine, {
       mouse: mouse,
       constraint: { stiffness: 0.2, render: { visible: false } },
-      collisionFilter: {
-          mask: 0b0011 // Only interact with red (0b0001) and blue (0b0010) blocks
-      }
     });
     mouseConstraintRef.current = mouseConstraint;
     World.add(world, mouseConstraint);
@@ -346,58 +326,55 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     Runner.run(runner, engine);
     updateCamera();
 
-    Events.on(mouseConstraint, 'mousedown', () => {
-      const mc = mouseConstraintRef.current;
-      if (!mc || !mc.body) return;
-      const draggedBody: CustomBody = mc.body;
-      const bodyTeam = draggedBody.label.split('-')[1] as Team;
-      
-      // Prevent picking up other team's blocks
-      if (bodyTeam !== team) {
-         if (mc.constraint) mc.constraint.bodyB = null;
-         return;
-      }
+    
+    Events.on(mouseConstraint, 'mousedown', (event) => {
+        const mc = mouseConstraintRef.current;
+        if (!mc || !mc.body) return;
 
-      if (draggedBody.initialOverlapWhitelist === undefined) {
-        draggedBody.initialOverlapWhitelist = new Set<number>();
-        const allOtherBodies = Composite.allBodies(engine.world).filter(
-          (body: Body) => body.id !== draggedBody.id && !body.isStatic
-        );
-        allOtherBodies.forEach(otherBody => {
-          const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
-          const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
-          const fictiveBounds = {
-            min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
-            max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
-          };
-          if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
-            draggedBody.initialOverlapWhitelist!.add(otherBody.id);
-          }
-        });
-      }
+        const draggedBody: CustomBody = mc.body;
+        const [_, bodyTeam] = draggedBody.label.split('-');
+
+        // Enforce team-based dragging
+        if (bodyTeam !== team) {
+            mc.constraint.bodyB = null; // Prevent dragging
+            return;
+        }
+
+        // Handle zone restrictions for dragging
+        if (apiRef.current) {
+            const { blueZone, redZone } = apiRef.current.getZones();
+            if (team === 'blue' && draggedBody.position.x > blueZone.max.x) {
+            // Let it go if it's already in no-mans-land
+            } else if (team === 'red' && draggedBody.position.x < redZone.min.x) {
+                // Let it go if it's already in no-mans-land
+            }
+        }
+        
+
+        if (draggedBody.initialOverlapWhitelist === undefined) {
+            draggedBody.initialOverlapWhitelist = new Set<number>();
+            const allOtherBodies = Composite.allBodies(engine.world).filter(
+                (body: Body) => body.id !== draggedBody.id && !body.isStatic
+            );
+            allOtherBodies.forEach(otherBody => {
+                const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
+                const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
+                const fictiveBounds = {
+                    min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
+                    max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
+                };
+                if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
+                  draggedBody.initialOverlapWhitelist!.add(otherBody.id);
+                }
+            });
+        }
     });
 
 
     Events.on(engine, 'beforeUpdate', () => {
       const mc = mouseConstraintRef.current;
       if (!mc || !mc.body) return;
-
       const draggedBody: CustomBody = mc.body;
-      
-      const bodyTeam = draggedBody.label.split('-')[1] as Team;
-      if (bodyTeam !== team) { // Should be redundant due to mousedown check, but good for safety
-          if (mc.constraint) mc.constraint.bodyB = null;
-          return;
-      }
-      
-      const targetZone = getTeamZone(draggedBody.position.x);
-
-      if ((targetZone === 'red' && team !== 'red') || (targetZone === 'blue' && team !== 'blue')) {
-          if (mc.constraint) mc.constraint.bodyB = null; // Release the block
-          return;
-      }
-
-
       if (draggedBody.initialOverlapWhitelist === undefined) return;
 
       const allOtherBodies = Composite.allBodies(engine.world).filter(
@@ -451,9 +428,10 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 
   useEffect(() => {
     const mc = mouseConstraintRef.current;
-    if (mc) {
-        mc.collisionFilter.mask = 0b1111; // Allow dragging all blocks
-    }
+    if (!mc) return;
+
+    const teamCategory = team === 'red' ? 0b0001 : 0b0010;
+    mc.collisionFilter.mask = teamCategory;
   }, [team]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -477,16 +455,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
-      setTimeout(() => {
-        const mc = mouseConstraintRef.current;
-        if (mc && mc.body) {
-          dragModeRef.current = 'none';
-          return;
-        }
+      const mc = mouseConstraintRef.current;
+      if (!mc?.body) {
         dragModeRef.current = 'panning';
         const touch = e.touches[0];
         lastTouchPosition.current = { x: touch.clientX, y: touch.clientY };
-      }, 0);
+      }
     } else if (e.touches.length === 2) {
       dragModeRef.current = 'zooming';
       const [t1, t2] = [e.touches[0], e.touches[1]];
@@ -612,7 +586,3 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
-
-    
-
-    
