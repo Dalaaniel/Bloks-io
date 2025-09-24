@@ -1,36 +1,59 @@
 
 'use client';
 
-import { getAllStoreBlocks } from '@/lib/blocks';
+import { getAllStoreBlocks, type BlockId } from '@/lib/blocks';
 import BlockCard from '@/components/store/block-card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { updateUserInventory, type UserInventory } from '@/services/auth-service';
 
 export default function StorePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const [inventory, setInventory] = useState<UserInventory | null>(null);
 
   useEffect(() => {
-    if (!loading && !user) {
-      // Handled by the check below, but good for defensive programming
+    if (!loading && user) {
+      setInventory(user.inventory);
     }
-  }, [user, loading, router]);
-
+  }, [user, loading]);
 
   const storeBlocks = getAllStoreBlocks();
 
-  const handleBuyBlock = (blockId: string) => {
-    console.log(`Bought block: ${blockId}`);
-    toast({
-      title: "Purchase Successful!",
-      description: `A new block has been added to your inventory.`,
-    });
-    // This is a placeholder. In a real app with state management,
-    // you would update a shared inventory state here.
+  const handleBuyBlock = async (blockId: string) => {
+    if (!user || !inventory) {
+      toast({
+        title: "Login Required",
+        description: "You must be logged in to purchase items.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newInventory = {
+      ...inventory,
+      [blockId as BlockId]: (inventory[blockId as BlockId] || 0) + 1,
+    };
+
+    try {
+      await updateUserInventory(user.uid, newInventory);
+      setInventory(newInventory); // Update local state to reflect purchase
+      toast({
+        title: "Purchase Successful!",
+        description: `A new block has been added to your inventory.`,
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Purchase Failed",
+        description: "Could not complete the purchase. Please try again.",
+        variant: "destructive",
+      });
+    }
   }
 
   if (loading) {
@@ -67,4 +90,3 @@ export default function StorePage() {
     </main>
   );
 }
-

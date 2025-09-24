@@ -2,16 +2,17 @@
 "use client";
 
 import React, { useState } from "react";
-import { getBlockById, type Team } from "@/lib/blocks";
+import { getBlockById, type Team, type BlockId } from "@/lib/blocks";
 import TetrisBlockComponent from "@/components/tetris-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "../ui/button";
 import { useRouter } from "next/navigation";
+import { type UserInventory } from "@/services/auth-service";
 
 interface InventoryProps {
-  ownedBlocks: { [key: string]: number };
+  ownedBlocks: UserInventory;
   team: Team;
   onBlockClick: (blockId: string) => void;
   onBlockTouchDrop?: (blockId: string, x: number, y: number) => void;

@@ -8,19 +8,15 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { CornerUpLeft } from 'lucide-react';
 import { type Body } from 'matter-js';
-import { type Team } from '@/lib/blocks';
+import { type Team, type BlockId } from '@/lib/blocks';
 import { useAuth } from '@/context/auth-context';
-import { useRouter } from 'next/navigation';
-
+import { updateUserInventory, type UserInventory } from '@/services/auth-service';
 
 export default function Home() {
   const { user, loading } = useAuth();
-  const router = useRouter();
-
-  const [ownedBlocks, setOwnedBlocks] = useState<{ [key: string]: number }>({
-    i: 5, o: 5, t: 5, l: 5, j: 5, s: 5, z: 5,
+  const [ownedBlocks, setOwnedBlocks] = useState<UserInventory>({
+    i: 0, o: 0, t: 0, l: 0, j: 0, s: 0, z: 0,
   });
-  // Default to blue, but will be updated based on user's team
   const [team, setTeam] = useState<Team>('blue');
   const { toast } = useToast();
   const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
@@ -28,32 +24,52 @@ export default function Home() {
   useEffect(() => {
     if (!loading && user) {
       setTeam(user.team);
+      if (user.inventory) {
+        setOwnedBlocks(user.inventory);
+      }
     }
   }, [user, loading]);
 
   const showSaveWarning = () => {
     toast({
       title: "Block placed!",
-      description: "Please wait 5 seconds for it to be saved.",
+      description: "Please wait 5 seconds for it to be saved. Do not disconnect.",
     });
   };
+  
+  const updateInventory = async (newInventory: UserInventory) => {
+    if (!user) return;
+    setOwnedBlocks(newInventory);
+    try {
+      await updateUserInventory(user.uid, newInventory);
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Inventory Sync Failed",
+        description: "Could not save inventory changes to your account.",
+        variant: "destructive"
+      })
+    }
+  }
 
   const useBlockFromInventory = (blockId: string) => {
-    if (ownedBlocks[blockId] && ownedBlocks[blockId] > 0) {
-      setOwnedBlocks(prev => ({
-        ...prev,
-        [blockId]: prev[blockId] - 1,
-      }));
+    if (ownedBlocks[blockId as BlockId] && ownedBlocks[blockId as BlockId] > 0) {
+      const newInventory = {
+        ...ownedBlocks,
+        [blockId]: ownedBlocks[blockId as BlockId] - 1,
+      };
+      updateInventory(newInventory);
       return true;
     }
     return false;
   };
 
   const addBlockToInventory = (blockId: string) => {
-    setOwnedBlocks(prev => ({
-      ...prev,
-      [blockId]: (prev[blockId] || 0) + 1,
-    }));
+    const newInventory = {
+      ...ownedBlocks,
+      [blockId]: (ownedBlocks[blockId as BlockId] || 0) + 1,
+    };
+    updateInventory(newInventory);
   };
 
   const checkAuth = () => {

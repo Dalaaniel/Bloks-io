@@ -6,7 +6,6 @@ import { type TetrisBlock } from "@/lib/blocks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import TetrisBlockComponent from "@/components/tetris-block";
-import { useToast } from "@/hooks/use-toast";
 
 interface BlockCardProps {
   block: TetrisBlock;
@@ -14,14 +13,9 @@ interface BlockCardProps {
 }
 
 export default function BlockCard({ block, onBuy }: BlockCardProps) {
-  const { toast } = useToast();
 
   const handleBuy = () => {
     onBuy(block.id);
-    toast({
-      title: "Purchase Successful!",
-      description: `A new ${block.name} has been added to your inventory. (Feature in development)`,
-    });
   };
 
   return (
