@@ -4,10 +4,9 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { type User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { type UserProfile, getUserProfile } from '@/services/auth-service';
+import { type UserProfile, getUserProfile, signOut as authServiceSignOut } from '@/services/auth-service';
 import { saveCanvasState, loadCanvasState } from '@/services/canvas-service';
 import { type Team } from '@/lib/blocks';
-import { type Body } from 'matter-js';
 
 // TYPES
 interface AuthContextType {
@@ -79,15 +78,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUserProfile(profile);
         } catch (error) {
           console.error("Failed to fetch user profile, signing out.", error);
-          await auth.signOut();
-        } finally {
-           setLoading(false);
+          await authServiceSignOut();
         }
       } else {
         setUser(null);
         setUserProfile(null);
-        setLoading(false);
       }
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -118,7 +115,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
-    await auth.signOut();
+    // Clear the session cookie by calling a dedicated API route
+    await fetch('/api/logout', { method: 'POST' });
+    await authServiceSignOut();
   };
 
   // INVENTORY

@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { signUp, signIn } from '@/services/auth-service';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -21,6 +20,8 @@ export default function LoginPage() {
   const { toast } = useToast();
   
   useEffect(() => {
+    // If the user is already logged in (e.g. they have a valid session cookie),
+    // redirect them away from the login page.
     if (!authLoading && user) {
       router.push('/');
     }
@@ -29,17 +30,30 @@ export default function LoginPage() {
 
   const handleAuthAction = async (action: 'signIn' | 'signUp') => {
     setLoading(true);
+    const endpoint = action === 'signIn' ? '/api/login' : '/api/signup';
+
     try {
-      if (action === 'signIn') {
-        await signIn(email, password);
-      } else {
-        await signUp(email, password);
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'An unexpected error occurred.');
       }
-      // The useEffect will handle the redirect on successful auth state change
+      
+      // On successful API call, the onAuthStateChanged listener in AuthProvider
+      // will pick up the change. The useEffect above will handle the redirect.
+      // For a quicker redirect, we can manually trigger it here.
+      router.push('/');
+
     } catch (error: any) {
       toast({
         title: 'Authentication Failed',
-        description: error.message || 'An unexpected error occurred.',
+        description: error.message,
         variant: 'destructive',
       });
     } finally {
