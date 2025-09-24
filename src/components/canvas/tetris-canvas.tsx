@@ -17,6 +17,19 @@ export interface TetrisCanvasApi {
 
 const BLOCK_WEIGHT = 40;
 const SPAWN_Y_OFFSET = 29500;
+const CANVAS_SIZE = { width: 100000, height: 30000 };
+
+const blueZoneEnd = CANVAS_SIZE.width * 0.2;
+const noManLandEnd = CANVAS_SIZE.width * 0.8;
+
+type Zone = 'blue' | 'no-man-land' | 'red';
+export const getTeamZone = (x: number): Zone => {
+  if (x < blueZoneEnd) return 'blue';
+  if (x < noManLandEnd) return 'no-man-land';
+  return 'red';
+};
+
+
 type DragMode = 'none' | 'panning' | 'zooming';
 
 interface CustomBody extends Body {
@@ -60,12 +73,11 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
   const mouseRef = useRef<Matter.Mouse>();
   const mouseConstraintRef = useRef<Matter.MouseConstraint>();
 
-  const [canvasSize] = useState({ width: 100000, height: 30000 });
   const [zoom, setZoom] = useState(0.5);
 
   const dragModeRef = useRef<DragMode>('none');
   const lastMousePosition = useRef({ x: 0, y: 0 });
-  const viewCenter = useRef({ x: canvasSize.width / 2, y: canvasSize.height - 1000 });
+  const viewCenter = useRef({ x: CANVAS_SIZE.width / 2, y: CANVAS_SIZE.height - 1000 });
   const zoomStartRef = useRef({ y: 0, zoom: 1 });
   const lastTouchPosition = useRef({ x: 0, y: 0 });
   const pinchZoomStartRef = useRef<{ distance: number; zoom: number } | null>(null);
@@ -114,20 +126,20 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
   useEffect(() => {
     const starsCanvas = starsCanvasRef.current;
     if (!starsCanvas) return;
-    starsCanvas.width = canvasSize.width;
-    starsCanvas.height = canvasSize.height;
+    starsCanvas.width = CANVAS_SIZE.width;
+    starsCanvas.height = CANVAS_SIZE.height;
     const ctx = starsCanvas.getContext('2d');
     if (!ctx) return;
     ctx.fillStyle = 'white';
     for (let i = 0; i < 20000; i++) {
-      const x = Math.random() * canvasSize.width;
-      const y = Math.random() * canvasSize.height;
+      const x = Math.random() * CANVAS_SIZE.width;
+      const y = Math.random() * CANVAS_SIZE.height;
       const radius = Math.random() * 1.5;
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
     }
-  }, [canvasSize.width, canvasSize.height]);
+  }, []);
 
   const addBlock = (blockId: string, x: number, y: number, team: Team) => {
     const engine = engineRef.current;
@@ -165,9 +177,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     spawnBlockForTeam: (blockId, team) => {
       const world = engineRef.current?.world;
       if (!world) return;
-      const canvasCenterX = canvasSize.width / 2;
-      const spawnAreaWidth = canvasSize.width / 4;
-      const xSpawn = team === 'blue' ? canvasCenterX - spawnAreaWidth : canvasCenterX + spawnAreaWidth;
+      let xSpawn;
+      if (team === 'blue') {
+        xSpawn = blueZoneEnd * 0.5; // Spawn in middle of blue zone
+      } else { // red team
+        xSpawn = noManLandEnd + (CANVAS_SIZE.width - noManLandEnd) * 0.5; // Spawn in middle of red zone
+      }
       addBlock(blockId as BlockId, xSpawn, SPAWN_Y_OFFSET, team);
     },
     getViewportCoordinates: (x, y) => {
@@ -202,7 +217,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     const newBody = createBlockBody(blockId as BlockId, sBody.position.x, sBody.position.y, (bodyTeam as Team) || team);
     if (!newBody) {
       // Fallback for safety, though it should not happen if data is clean
-      return Bodies.rectangle(sBody.position.x, sBody.position.y, 80, 80);
+      return Matter.Bodies.rectangle(sBody.position.x, sBody.position.y, 80, 80);
     }
     
     Matter.Body.setAngle(newBody, sBody.angle);
@@ -231,7 +246,15 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
       },
     });
     renderRef.current = render;
-    World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height - 30, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' }, collisionFilter: { category: 0b0100 } }));
+    World.add(world, Bodies.rectangle(CANVAS_SIZE.width / 2, CANVAS_SIZE.height - 30, CANVAS_SIZE.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' }, collisionFilter: { category: 0b0100 } }));
+
+    // Visualize zones
+    World.add(world, [
+        Bodies.rectangle(blueZoneEnd / 2, CANVAS_SIZE.height / 2, blueZoneEnd, CANVAS_SIZE.height, { isStatic: true, isSensor: true, render: { fillStyle: 'rgba(0, 0, 255, 0.05)' } }),
+        Bodies.rectangle(blueZoneEnd + (noManLandEnd - blueZoneEnd) / 2, CANVAS_SIZE.height / 2, noManLandEnd - blueZoneEnd, CANVAS_SIZE.height, { isStatic: true, isSensor: true, render: { fillStyle: 'rgba(128, 128, 128, 0.05)' } }),
+        Bodies.rectangle(noManLandEnd + (CANVAS_SIZE.width - noManLandEnd) / 2, CANVAS_SIZE.height / 2, CANVAS_SIZE.width - noManLandEnd, CANVAS_SIZE.height, { isStatic: true, isSensor: true, render: { fillStyle: 'rgba(255, 0, 0, 0.05)' } })
+    ]);
+
 
     // Load canvas state from server
     loadCanvasState().then(state => {
@@ -245,7 +268,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     const saveInterval = setInterval(() => {
       if (engineRef.current) {
           const bodies = Composite.allBodies(engineRef.current.world)
-              .filter(body => !body.isStatic)
+              .filter(body => !body.isStatic && body.label.startsWith('block-'))
               .map(body => ({
                   id: body.id,
                   label: body.label,
@@ -288,6 +311,14 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
       const mc = mouseConstraintRef.current;
       if (!mc || !mc.body) return;
       const draggedBody: CustomBody = mc.body;
+      const bodyTeam = draggedBody.label.split('-')[1] as Team;
+      
+      // Prevent picking up other team's blocks
+      if (bodyTeam !== team) {
+         if (mc.constraint) mc.constraint.bodyB = null;
+         return;
+      }
+
       if (draggedBody.initialOverlapWhitelist === undefined) {
         draggedBody.initialOverlapWhitelist = new Set<number>();
         const allOtherBodies = Composite.allBodies(engine.world).filter(
@@ -311,6 +342,21 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
       const mc = mouseConstraintRef.current;
       if (!mc || !mc.body) return;
       const draggedBody: CustomBody = mc.body;
+      
+      const bodyTeam = draggedBody.label.split('-')[1] as Team;
+      if (bodyTeam !== team) { // Should be redundant due to mousedown check, but good for safety
+          if (mc.constraint) mc.constraint.bodyB = null;
+          return;
+      }
+      
+      const targetZone = getTeamZone(draggedBody.position.x);
+
+      if ((targetZone === 'red' && team !== 'red') || (targetZone === 'blue' && team !== 'blue')) {
+          if (mc.constraint) mc.constraint.bodyB = null; // Release the block
+          return;
+      }
+
+
       if (draggedBody.initialOverlapWhitelist === undefined) return;
 
       const allOtherBodies = Composite.allBodies(engine.world).filter(
@@ -356,7 +402,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
       if (render.textures) render.textures = {};
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasSize.width, canvasSize.height]);
+  }, []);
 
   useEffect(() => {
     updateCamera();
@@ -364,10 +410,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 
   useEffect(() => {
     const mc = mouseConstraintRef.current;
-    const teamCategory = team === 'red' ? 0b0001 : 0b0010;
-    const groundCategory = 0b0100;
     if (mc) {
-      mc.collisionFilter.mask = teamCategory | groundCategory;
+        mc.collisionFilter.mask = 0b1111; // Allow dragging all blocks
     }
   }, [team]);
 

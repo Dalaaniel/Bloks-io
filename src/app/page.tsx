@@ -3,7 +3,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import Inventory from '@/components/canvas/inventory';
-import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-canvas';
+import TetrisCanvas, { type TetrisCanvasApi, getTeamZone } from '@/components/canvas/tetris-canvas';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { CornerUpLeft } from 'lucide-react';
@@ -95,6 +95,16 @@ export default function Home() {
     const xOnElement = event.clientX - canvasRect.left;
     const yOnElement = event.clientY - canvasRect.top;
     const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
+
+    const targetZone = getTeamZone(worldCoords.x);
+    if (targetZone === 'red' && team !== 'red') {
+      toast({ title: "Placement Invalid", description: "You cannot place blocks in the red team's zone.", variant: "destructive" });
+      return;
+    }
+    if (targetZone === 'blue' && team !== 'blue') {
+      toast({ title: "Placement Invalid", description: "You cannot place blocks in the blue team's zone.", variant: "destructive" });
+      return;
+    }
     
     const checkSize = 80;
     const checkBounds = {
@@ -152,6 +162,17 @@ export default function Home() {
     const yOnElement = clientY - canvasRect.top;
 
     const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
+
+     const targetZone = getTeamZone(worldCoords.x);
+    if (targetZone === 'red' && team !== 'red') {
+      toast({ title: "Placement Invalid", description: "You cannot place blocks in the red team's zone.", variant: "destructive" });
+      return;
+    }
+    if (targetZone === 'blue' && team !== 'blue') {
+      toast({ title: "Placement Invalid", description: "You cannot place blocks in the blue team's zone.", variant: "destructive" });
+      return;
+    }
+
 
     if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
