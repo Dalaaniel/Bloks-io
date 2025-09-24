@@ -34,6 +34,8 @@ export const getTeamZone = (x: number): Zone => {
 
 type DragMode = 'none' | 'panning' | 'zooming';
 
+const CANVAS_SIZE = { width: 100000, height: 30000 };
+
 interface CustomBody extends Body {
   initialOverlapWhitelist?: Set<number>;
 }
@@ -81,25 +83,26 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
   const dragModeRef = useRef<DragMode>('none');
   const lastMousePosition = useRef({ x: 0, y: 0 });
   const viewCenter = useRef({ x: CANVAS_SIZE.width / 2, y: CANVAS_SIZE.height - 1000 });
+  const viewCenter = useRef({ x: CANVAS_SIZE.width / 2, y: CANVAS_SIZE.height - 1000 });
   const zoomStartRef = useRef({ y: 0, zoom: 1 });
   const lastTouchPosition = useRef({ x: 0, y: 0 });
   const pinchZoomStartRef = useRef<{ distance: number; zoom: number } | null>(null);
 
   
-  const blueZoneWidth = canvasSize.width * 0.2;
-  const noMansLandWidth = canvasSize.width * 0.6;
+  const blueZoneWidth = CANVAS_SIZE.width * 0.2;
+  const noMansLandWidth = CANVAS_SIZE.width * 0.6;
 
   const blueZoneBounds = {
       min: { x: 0, y: 0 },
-      max: { x: blueZoneWidth, y: canvasSize.height }
+      max: { x: blueZoneWidth, y: CANVAS_SIZE.height }
   };
   const noMansLandBounds = {
       min: { x: blueZoneWidth, y: 0 },
-      max: { x: blueZoneWidth + noMansLandWidth, y: canvasSize.height }
+      max: { x: blueZoneWidth + noMansLandWidth, y: CANVAS_SIZE.height }
   };
   const redZoneBounds = {
       min: { x: blueZoneWidth + noMansLandWidth, y: 0 },
-      max: { x: canvasSize.width, y: canvasSize.height }
+      max: { x: CANVAS_SIZE.width, y: CANVAS_SIZE.height }
   };
   const createBlockBody = (blockId: string, x: number, y: number, team: Team): CustomBody | null => {
       const blockData = getBlockById(blockId, team);
