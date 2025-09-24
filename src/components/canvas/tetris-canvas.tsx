@@ -381,6 +381,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     Events.on(engine, 'beforeUpdate', () => {
       const mc = mouseConstraintRef.current;
       if (!mc || !mc.body) return;
+
       const draggedBody: CustomBody = mc.body;
       
       const bodyTeam = draggedBody.label.split('-')[1] as Team;
