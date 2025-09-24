@@ -6,12 +6,11 @@ import Inventory from '@/components/canvas/inventory';
 import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-canvas';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { CornerUpLeft, Trash2 } from 'lucide-react';
+import { CornerUpLeft } from 'lucide-react';
 import { type Body } from 'matter-js';
 import { type Team, type BlockId } from '@/lib/blocks';
 import { useAuth } from '@/context/auth-context';
 import { updateUserInventory, type UserInventory } from '@/services/auth-service';
-import { resetCanvasState } from '@/services/canvas-service';
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -174,28 +173,6 @@ export default function Home() {
     tetrisCanvasApiRef.current?.resetView();
   };
 
-  const handleResetCanvas = async () => {
-    if (!checkAuth()) return;
-    if (confirm("Are you sure you want to reset the entire canvas for everyone? This cannot be undone.")) {
-      try {
-        await resetCanvasState();
-        toast({
-          title: "Canvas Resetting",
-          description: "The canvas has been cleared. The page will now reload.",
-        });
-        setTimeout(() => window.location.reload(), 1500);
-      } catch (error) {
-        console.error("Failed to reset canvas:", error);
-        toast({
-          title: "Reset Failed",
-          description: "Could not reset the canvas. Please try again.",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-
   return (
     <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
       <Inventory 
@@ -219,14 +196,6 @@ export default function Home() {
             title="Reset to Top-Left"
           >
             <CornerUpLeft className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="destructive" 
-            size="icon" 
-            onClick={handleResetCanvas}
-            title="Reset Canvas"
-          >
-            <Trash2 className="h-4 w-4" />
           </Button>
         </div>
         <div className="absolute bottom-4 right-4 bg-black/50 text-white p-2 rounded-md text-xs pointer-events-none">
