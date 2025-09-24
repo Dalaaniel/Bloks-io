@@ -15,15 +15,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp, signIn, user } = useAuth();
+  const { signUp, signIn, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   
   useEffect(() => {
-    if (user) {
+    if (!authLoading && user) {
       router.push('/');
     }
-  }, [user, router]);
+  }, [user, authLoading, router]);
 
 
   const handleAuthAction = async (action: 'signIn' | 'signUp') => {
@@ -88,7 +88,7 @@ export default function LoginPage() {
                 <Input id="signup-email" type="email" placeholder="m@example.com" value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="signup-password">Password</Label>
+                <Label htmlFor="signup-password">Password</Label>                
                 <Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading} />
               </div>
             </CardContent>

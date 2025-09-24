@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import { type User as FirebaseUser, type UserCredential } from 'firebase/auth';
+import { type User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { type UserProfile, signUp as authSignUp, signIn as authSignIn, signOut as authSignOut, getUserProfile } from '@/services/auth-service';
 import { saveCanvasState, loadCanvasState } from '@/services/canvas-service';
@@ -22,8 +22,8 @@ interface AuthContextType {
   addBlockToInventory: (blockId: string) => void;
   useBlockFromInventory: (blockId: string) => boolean;
   returnBlockToInventory: (blockId: string) => void;
-  signUp: (email: string, password: string) => Promise<UserCredential>;
-  signIn: (email: string, password: string) => Promise<UserCredential>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   saveState: (state: SerializedCanvasState) => void;
 }
@@ -75,19 +75,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       setLoading(true);
       if (firebaseUser) {
-        // User is signed in.
+        setUser(firebaseUser);
         try {
           const profile = await getUserProfile(firebaseUser.uid);
           setUserProfile(profile);
-          setUser(firebaseUser);
         } catch (error) {
           console.error("Failed to fetch user profile, signing out.", error);
-          await authSignOut(); // This will trigger onAuthStateChanged again
+          await authSignOut();
         } finally {
            setLoading(false);
         }
       } else {
-        // User is signed out.
         setUser(null);
         setUserProfile(null);
         setLoading(false);
@@ -116,7 +114,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const timeout = setTimeout(() => {
       saveCanvasState(newState).catch(err => {
         console.error("Failed to save canvas state:", err);
-        // Potentially handle failed save, e.g., show a toast
       });
     }, 1000); // Debounce saves to every 1 second
     setSaveTimeout(timeout);
