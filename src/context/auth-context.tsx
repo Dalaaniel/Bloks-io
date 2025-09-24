@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import { type User as FirebaseUser } from 'firebase/auth';
+import { type User as FirebaseUser, type UserCredential } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { type UserProfile, signUp as authSignUp, signIn as authSignIn, signOut as authSignOut, getUserProfile } from '@/services/auth-service';
 import { saveCanvasState, loadCanvasState } from '@/services/canvas-service';
@@ -22,8 +22,8 @@ interface AuthContextType {
   addBlockToInventory: (blockId: string) => void;
   useBlockFromInventory: (blockId: string) => boolean;
   returnBlockToInventory: (blockId: string) => void;
-  signUp: (email: string, password: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<UserCredential>;
+  signIn: (email: string, password: string) => Promise<UserCredential>;
   signOut: () => Promise<void>;
   saveState: (state: SerializedCanvasState) => void;
 }
@@ -124,11 +124,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   const signUp = async (email: string, password: string) => {
-    await authSignUp(email, password);
+    return authSignUp(email, password);
   };
 
   const signIn = async (email: string, password: string) => {
-    await authSignIn(email, password);
+    return authSignIn(email, password);
   };
 
   const signOut = async () => {

@@ -7,6 +7,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
+  type UserCredential,
 } from 'firebase/auth';
 import { type Team } from '@/lib/blocks';
 
@@ -16,7 +17,7 @@ export interface UserProfile {
   team: Team;
 }
 
-export async function signUp(email: string, password: string): Promise<void> {
+export async function signUp(email: string, password: string): Promise<UserCredential> {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   const user = userCredential.user;
 
@@ -47,10 +48,11 @@ export async function signUp(email: string, password: string): Promise<void> {
   };
 
   await setDoc(doc(db, 'users', user.uid), userProfile);
+  return userCredential;
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
-  await signInWithEmailAndPassword(auth, email, password);
+export async function signIn(email: string, password: string): Promise<UserCredential> {
+  return signInWithEmailAndPassword(auth, email, password);
 }
 
 export async function signOut(): Promise<void> {
