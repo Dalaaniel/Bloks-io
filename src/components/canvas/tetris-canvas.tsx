@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
@@ -249,7 +250,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     World.add(world, Bodies.rectangle(CANVAS_SIZE.width / 2, CANVAS_SIZE.height - 30, CANVAS_SIZE.width, 60, { 
         isStatic: true, 
         render: { fillStyle: '#2a2a2a' }, 
-        collisionFilter: { category: 0b0100, mask: 0 } 
+        collisionFilter: { category: 0b0100, mask: 0b1111 } 
     }));
 
     // Visualize zones
@@ -311,6 +312,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     const mouseConstraint = MouseConstraint.create(engine, {
       mouse: mouse,
       constraint: { stiffness: 0.2, render: { visible: false } },
+      collisionFilter: {
+          mask: 0b0011 // Only interact with red (0b0001) and blue (0b0010) blocks
+      }
     });
     mouseConstraintRef.current = mouseConstraint;
     World.add(world, mouseConstraint);
@@ -584,5 +588,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
+
+    
 
     
