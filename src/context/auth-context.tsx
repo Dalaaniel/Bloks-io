@@ -22,8 +22,8 @@ interface AuthContextType {
   addBlockToInventory: (blockId: string) => void;
   useBlockFromInventory: (blockId: string) => boolean;
   returnBlockToInventory: (blockId: string) => void;
-  signUp: (email: string, password: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<FirebaseUser>;
+  signIn: (email: string, password: string) => Promise<FirebaseUser>;
   signOut: () => Promise<void>;
   saveState: (state: SerializedCanvasState) => void;
 }
@@ -73,6 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // AUTH and USER PROFILE
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      setLoading(true);
       if (firebaseUser) {
         setUser(firebaseUser);
         try {
@@ -81,6 +82,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } catch (e) {
           console.error("Failed to fetch user profile, signing out.", e);
           await authSignOut();
+          setUser(null);
+          setUserProfile(null);
         }
       } else {
         setUser(null);
@@ -119,15 +122,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   const signUp = async (email: string, password: string) => {
-    const profile = await authSignUp(email, password);
-    setUserProfile(profile);
-    setUser(auth.currentUser);
+    const userCredential = await authSignUp(email, password);
+    return userCredential;
   };
 
   const signIn = async (email: string, password: string) => {
-    const profile = await authSignIn(email, password);
-    setUserProfile(profile);
-    setUser(auth.currentUser);
+    const userCredential = await authSignIn(email, password);
+    return userCredential;
   };
 
   const signOut = async () => {
@@ -182,7 +183,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

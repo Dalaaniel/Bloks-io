@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { Button } from '@/components/ui/button';
@@ -14,9 +15,16 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp, signIn } = useAuth();
+  const { signUp, signIn, user } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  
+  useEffect(() => {
+    if (user) {
+      router.push('/');
+    }
+  }, [user, router]);
+
 
   const handleAuthAction = async (action: 'signIn' | 'signUp') => {
     setLoading(true);
@@ -26,7 +34,7 @@ export default function LoginPage() {
       } else {
         await signUp(email, password);
       }
-      router.push('/');
+      // The useEffect will handle the redirect
     } catch (error: any) {
       toast({
         title: 'Authentication Failed',

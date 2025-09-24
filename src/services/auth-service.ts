@@ -1,3 +1,4 @@
+
 'use server';
 
 import { auth, db } from '@/lib/firebase';
@@ -6,6 +7,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
+  type User as FirebaseUser,
 } from 'firebase/auth';
 import { type Team } from '@/lib/blocks';
 
@@ -15,7 +17,7 @@ export interface UserProfile {
   team: Team;
 }
 
-export async function signUp(email: string, password: string): Promise<UserProfile> {
+export async function signUp(email: string, password: string): Promise<FirebaseUser> {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   const user = userCredential.user;
 
@@ -46,16 +48,12 @@ export async function signUp(email: string, password: string): Promise<UserProfi
   };
 
   await setDoc(doc(db, 'users', user.uid), userProfile);
-  return userProfile;
+  return user;
 }
 
-export async function signIn(email: string, password: string): Promise<UserProfile> {
-  await signInWithEmailAndPassword(auth, email, password);
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error('User not found after sign-in');
-  }
-  return await getUserProfile(user.uid);
+export async function signIn(email: string, password: string): Promise<FirebaseUser> {
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  return userCredential.user;
 }
 
 export async function signOut(): Promise<void> {
@@ -67,6 +65,13 @@ export async function getUserProfile(uid: string): Promise<UserProfile> {
   if (userDoc.exists()) {
     return userDoc.data() as UserProfile;
   } else {
+    // This can happen briefly during signup before the profile is created.
+    // Let's try waiting a bit and fetching again.
+    await new Promise(resolve => setTimeout(resolve, 1500));
+     const userDocAgain = await getDoc(doc(db, 'users', uid));
+     if(userDocAgain.exists()){
+        return userDocAgain.data() as UserProfile;
+     }
     throw new Error('User profile not found');
   }
 }
