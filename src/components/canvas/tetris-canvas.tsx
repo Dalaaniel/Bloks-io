@@ -13,6 +13,7 @@ export interface TetrisCanvasApi {
   getViewportCoordinates: (x: number, y: number) => { x: number, y: number };
   resetView: () => void;
   getBodiesInRegion: (bounds: Matter.Bounds) => Matter.Body[];
+  getZones: () => { blueZone: Matter.Bounds, redZone: Matter.Bounds, noMansLand: Matter.Bounds };
   canvasElement: HTMLCanvasElement | null;
 }
 
@@ -73,6 +74,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
   const renderRef = useRef<Matter.Render>();
   const mouseRef = useRef<Matter.Mouse>();
   const mouseConstraintRef = useRef<Matter.MouseConstraint>();
+  const apiRef = useRef<TetrisCanvasApi | null>(null);
 
   const [zoom, setZoom] = useState(0.5);
 
@@ -83,6 +85,22 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
   const lastTouchPosition = useRef({ x: 0, y: 0 });
   const pinchZoomStartRef = useRef<{ distance: number; zoom: number } | null>(null);
 
+  
+  const blueZoneWidth = canvasSize.width * 0.2;
+  const noMansLandWidth = canvasSize.width * 0.6;
+
+  const blueZoneBounds = {
+      min: { x: 0, y: 0 },
+      max: { x: blueZoneWidth, y: canvasSize.height }
+  };
+  const noMansLandBounds = {
+      min: { x: blueZoneWidth, y: 0 },
+      max: { x: blueZoneWidth + noMansLandWidth, y: canvasSize.height }
+  };
+  const redZoneBounds = {
+      min: { x: blueZoneWidth + noMansLandWidth, y: 0 },
+      max: { x: canvasSize.width, y: canvasSize.height }
+  };
   const createBlockBody = (blockId: string, x: number, y: number, team: Team): CustomBody | null => {
       const blockData = getBlockById(blockId, team);
       if (!blockData) return null;
@@ -230,6 +248,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 
   useEffect(() => {
     if (!sceneRef.current) return;
+
     const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events, Composite } = Matter;
     const engine = Engine.create({ gravity: { y: 0.4 } });
     engineRef.current = engine;
@@ -354,6 +373,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
         });
       }
     });
+
 
     Events.on(engine, 'beforeUpdate', () => {
       const mc = mouseConstraintRef.current;

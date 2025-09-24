@@ -84,6 +84,18 @@ export default function Home() {
     return true;
   }
 
+  const isPlacementInValidZone = (x: number, team: Team) => {
+    if (!tetrisCanvasApiRef.current) return false;
+    const { blueZone, redZone } = tetrisCanvasApiRef.current.getZones();
+    if (team === 'blue' && x > blueZone.max.x) {
+        return false;
+    }
+    if (team === 'red' && x < redZone.min.x) {
+        return false;
+    }
+    return true;
+  }
+
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     if (!checkAuth() || !tetrisCanvasApiRef.current) return;
@@ -139,6 +151,7 @@ export default function Home() {
 
   const handleSpawnBlock = (blockId: string) => {
     if (!checkAuth() || !tetrisCanvasApiRef.current) return;
+
     if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current?.spawnBlockForTeam(blockId, team);
       showSaveWarning();
