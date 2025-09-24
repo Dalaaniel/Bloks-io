@@ -15,15 +15,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp, signIn, user } = useAuth();
+  const { signUp, signIn, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   
   useEffect(() => {
-    if (user) {
+    if (!authLoading && user) {
       router.push('/');
     }
-  }, [user, router]);
+  }, [user, authLoading, router]);
 
 
   const handleAuthAction = async (action: 'signIn' | 'signUp') => {
