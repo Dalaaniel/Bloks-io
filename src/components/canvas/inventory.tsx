@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useInventory } from "@/context/inventory-context";
+import { useAuth } from "@/context/auth-context";
 import { getBlockById, type Team } from "@/lib/blocks";
 import TetrisBlockComponent from "@/components/tetris-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -9,32 +9,24 @@ import { Separator } from "@/components/ui/separator";
 
 interface InventoryProps {
   onBlockClick: (blockId: string) => void;
-  onBlockTouchDrop?: (blockId: string, x: number, y: number) => void;  // NEW
+  onBlockTouchDrop?: (blockId: string, x: number, y: number) => void;
 }
 
 export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryProps) {
-  const { ownedBlocks, team } = useInventory();
+  const { ownedBlocks, team } = useAuth();
 
-  // Track touch dragging state
   const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
   const [touchPosition, setTouchPosition] = useState<{ x: number; y: number } | null>(null);
 
-  if (!team) {
-  // team is null or undefined here, handle or return early
-  return null; // or some fallback UI 
-  }
-  // Now team is guaranteed to be a valid Team type:
-  const draggingBlock = draggingBlockId ? getBlockById(draggingBlockId, team) : undefined;
-
+  const draggingBlock = draggingBlockId && team ? getBlockById(draggingBlockId, team) : undefined;
 
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>, blockId: string) => {
     event.dataTransfer.setData("application/tetris-block", blockId);
     event.dataTransfer.effectAllowed = "move";
   };
 
-  // TOUCH HANDLERS
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>, blockId: string) => {
-    event.preventDefault(); // Prevent mouse emulation events
+    event.preventDefault();
     setDraggingBlockId(blockId);
     const touch = event.touches[0];
     setTouchPosition({ x: touch.clientX, y: touch.clientY });
@@ -48,12 +40,9 @@ export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryP
 
   const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
     if (!draggingBlockId || !touchPosition) return;
-
-    // Send the drop position to parent for spawning logic
     if (onBlockTouchDrop) {
       onBlockTouchDrop(draggingBlockId, touchPosition.x, touchPosition.y);
     }
-
     setDraggingBlockId(null);
     setTouchPosition(null);
   };
@@ -72,7 +61,7 @@ export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryP
           <h2 className="text-lg font-semibold tracking-tight">Inventory</h2>
         </div>
         <div className="p-4 text-center text-sm text-muted-foreground">
-          Assigning team...
+          Please log in to see your inventory.
         </div>
       </aside>
     );
@@ -100,9 +89,9 @@ export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryP
                   draggable
                   onDragStart={(e) => handleDragStart(e, block.id)}
                   onClick={() => onBlockClick(block.id)}
-                  onTouchStart={(e) => handleTouchStart(e, block.id)}  // NEW
-                  onTouchMove={handleTouchMove}                        // NEW
-                  onTouchEnd={handleTouchEnd}                          // NEW
+                  onTouchStart={(e) => handleTouchStart(e, block.id)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
                   className="p-2 rounded-lg cursor-pointer hover:bg-accent transition-colors flex flex-col items-center"
                 >
                   <div className="w-16 h-16">
@@ -124,13 +113,12 @@ export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryP
         Click or drag blocks onto the canvas.
       </div>
 
-      {/* FLOATING PREVIEW */}
       {draggingBlock && touchPosition && (
         <div
           style={{
             position: "fixed",
             pointerEvents: "none",
-            top: touchPosition.y - 40, // center the preview around finger (adjust as needed)
+            top: touchPosition.y - 40,
             left: touchPosition.x - 40,
             width: 80,
             height: 80,
@@ -139,7 +127,7 @@ export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryP
           }}
         >
             <TetrisBlockComponent
-              block={draggingBlock} // `!` tells TS "this won't be undefined"
+              block={draggingBlock}
               className="w-full h-full"
             />
         </div>

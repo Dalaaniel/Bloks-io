@@ -2,7 +2,7 @@
 
 import { CreditCard, ShoppingCart } from "lucide-react";
 import { type TetrisBlock } from "@/lib/blocks";
-import { useInventory } from "@/context/inventory-context";
+import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import TetrisBlockComponent from "@/components/tetris-block";
@@ -13,11 +13,11 @@ interface BlockCardProps {
 }
 
 export default function BlockCard({ block }: BlockCardProps) {
-  const { addBlock } = useInventory();
+  const { addBlockToInventory } = useAuth();
   const { toast } = useToast();
 
   const handleBuy = () => {
-    addBlock(block.id);
+    addBlockToInventory(block.id);
     toast({
       title: "Purchase Successful!",
       description: `A new ${block.name} has been added to your inventory.`,

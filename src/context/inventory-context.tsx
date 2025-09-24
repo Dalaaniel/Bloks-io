@@ -2,40 +2,149 @@
 "use client";
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
+import { type User as FirebaseUser } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import { type UserProfile, signUp as authSignUp, signIn as authSignIn, signOut as authSignOut, getUserProfile } from '@/services/auth-service';
+import { saveCanvasState, loadCanvasState } from '@/services/canvas-service';
 import { type Team } from '@/lib/blocks';
+import { type Body } from 'matter-js';
 
-interface InventoryContextType {
-  ownedBlocks: { [key: string]: number };
+// TYPES
+interface AuthContextType {
+  user: FirebaseUser | null;
+  userProfile: UserProfile | null;
   team: Team | null;
+  loading: boolean;
+  ownedBlocks: { [key: string]: number };
   zoom: number;
+  canvasState: SerializedCanvasState | null;
   setZoom: (zoom: number) => void;
-  addBlock: (blockId: string) => void;
-  useBlock: (blockId: string) => boolean;
-  returnBlock: (blockId: string) => void;
+  addBlockToInventory: (blockId: string) => void;
+  useBlockFromInventory: (blockId: string) => boolean;
+  returnBlockToInventory: (blockId: string) => void;
+  signUp: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  saveState: (state: SerializedCanvasState) => void;
 }
 
-const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
+export interface SerializedBody {
+  id: number;
+  label: string;
+  position: { x: number; y: number };
+  angle: number;
+  vertices: { x: number, y: number }[];
+  velocity: { x: number; y: number };
+  angularVelocity: number;
+  isStatic: boolean;
+  parts: SerializedBody[];
+  restitution: number;
+  friction: number;
+  render: {
+    fillStyle?: string;
+    strokeStyle?: string;
+    lineWidth?: number;
+  };
+   initialOverlapWhitelist?: number[];
+}
 
-export const InventoryProvider = ({ children }: { children: ReactNode }) => {
+export interface SerializedCanvasState {
+  bodies: SerializedBody[];
+  zoom: number;
+  viewCenter: { x: number; y: number };
+}
+
+// CONTEXT
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+
+// PROVIDER
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
   const [ownedBlocks, setOwnedBlocks] = useState<{ [key: string]: number }>({
     i: 5, o: 5, t: 5, l: 5, j: 5, s: 5, z: 5,
   });
-  const [team, setTeam] = useState<Team | null>(null);
   const [zoom, setZoom] = useState(0.5);
+  const [canvasState, setCanvasState] = useState<SerializedCanvasState | null>(null);
+  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
+  // AUTH and USER PROFILE
   useEffect(() => {
-    // Randomly assign a team on initial load
-    setTeam(Math.random() < 0.5 ? 'red' : 'blue');
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        try {
+          const profile = await getUserProfile(firebaseUser.uid);
+          setUserProfile(profile);
+        } catch (e) {
+          console.error("Failed to fetch user profile, signing out.", e);
+          await authSignOut();
+        }
+      } else {
+        setUser(null);
+        setUserProfile(null);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  const addBlock = useCallback((blockId: string) => {
+  // CANVAS STATE
+   useEffect(() => {
+    const fetchCanvasState = async () => {
+      const state = await loadCanvasState();
+      if (state) {
+        setCanvasState(state);
+        setZoom(state.zoom || 0.5);
+      }
+    };
+    fetchCanvasState();
+  }, []);
+
+  const saveState = (newState: SerializedCanvasState) => {
+    setCanvasState(newState); // Optimistic update
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+    }
+    const timeout = setTimeout(() => {
+      saveCanvasState(newState).catch(err => {
+        console.error("Failed to save canvas state:", err);
+        // Potentially handle failed save, e.g., show a toast
+      });
+    }, 1000); // Debounce saves to every 1 second
+    setSaveTimeout(timeout);
+  };
+
+
+  const signUp = async (email: string, password: string) => {
+    const profile = await authSignUp(email, password);
+    setUserProfile(profile);
+    setUser(auth.currentUser);
+  };
+
+  const signIn = async (email: string, password: string) => {
+    const profile = await authSignIn(email, password);
+    setUserProfile(profile);
+    setUser(auth.currentUser);
+  };
+
+  const signOut = async () => {
+    await authSignOut();
+    setUser(null);
+    setUserProfile(null);
+  };
+
+  // INVENTORY
+  const addBlockToInventory = useCallback((blockId: string) => {
     setOwnedBlocks(prev => ({
       ...prev,
       [blockId]: (prev[blockId] || 0) + 1,
     }));
   }, []);
 
-  const useBlock = useCallback((blockId: string) => {
+  const useBlockFromInventory = useCallback((blockId: string) => {
     if (ownedBlocks[blockId] && ownedBlocks[blockId] > 0) {
       setOwnedBlocks(prev => ({
         ...prev,
@@ -46,26 +155,43 @@ export const InventoryProvider = ({ children }: { children: ReactNode }) => {
     return false;
   }, [ownedBlocks]);
 
-  const returnBlock = useCallback((blockId: string) => {
+  const returnBlockToInventory = useCallback((blockId: string) => {
     setOwnedBlocks(prev => ({
       ...prev,
       [blockId]: (prev[blockId] || 0) + 1,
     }));
   }, []);
 
-  const value = { ownedBlocks, team, addBlock, useBlock, returnBlock, zoom, setZoom };
+  const value = {
+    user,
+    userProfile,
+    team: userProfile?.team || null,
+    loading,
+    ownedBlocks,
+    zoom,
+    setZoom,
+    addBlockToInventory,
+    useBlockFromInventory,
+    returnBlockToInventory,
+    signUp,
+    signIn,
+    signOut,
+    canvasState,
+    saveState,
+  };
 
   return (
-    <InventoryContext.Provider value={value}>
-      {children}
-    </InventoryContext.Provider>
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
   );
 };
 
-export const useInventory = () => {
-  const context = useContext(InventoryContext);
+// HOOK
+export const useAuth = () => {
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useInventory must be used within an InventoryProvider');
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 };

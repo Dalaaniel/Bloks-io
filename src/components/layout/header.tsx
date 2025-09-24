@@ -2,12 +2,19 @@
 "use client";
 
 import Link from 'next/link';
-import { Shapes } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Shapes, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useInventory } from '@/context/inventory-context';
+import { useAuth } from '@/context/auth-context';
 
 export default function Header() {
-  const { team } = useInventory();
+  const { user, team, signOut } = useAuth();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/login');
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -26,12 +33,23 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-4">
-          {team && (
-            <div className={`px-3 py-1.5 text-sm font-bold rounded-full ${
-              team === 'red' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
-            }`}>
-              Team {team.charAt(0).toUpperCase() + team.slice(1)}
-            </div>
+          {user ? (
+            <>
+              {team && (
+                <div className={`px-3 py-1.5 text-sm font-bold rounded-full ${
+                  team === 'red' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+                }`}>
+                  Team {team.charAt(0).toUpperCase() + team.slice(1)}
+                </div>
+              )}
+              <Button variant="ghost" size="icon" onClick={handleSignOut} title="Logout">
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </>
+          ) : (
+            <Button asChild>
+              <Link href="/login">Login</Link>
+            </Button>
           )}
         </div>
       </div>

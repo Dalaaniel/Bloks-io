@@ -1,19 +1,27 @@
 
 "use client";
 
-import React, { useRef } from 'react';
-import { useInventory } from '@/context/inventory-context';
+import React, { useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/auth-context';
 import Inventory from '@/components/canvas/inventory';
 import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-canvas';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { CornerUpLeft } from 'lucide-react';
+import { CornerUpLeft, Loader } from 'lucide-react';
 import { type Body } from 'matter-js';
 
 export default function Home() {
-  const { useBlock, returnBlock, team } = useInventory();
+  const { useBlockFromInventory, team, loading, user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [loading, user, router]);
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -26,7 +34,6 @@ export default function Home() {
     const yOnElement = event.clientY - canvasRect.top;
     const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
     
-    // Define the "fictive area" for checking - e.g., an 80x80 box
     const checkSize = 80;
     const checkBounds = {
       min: { x: worldCoords.x - checkSize / 2, y: worldCoords.y - checkSize / 2 },
@@ -35,7 +42,6 @@ export default function Home() {
 
     const bodiesInArea = tetrisCanvasApiRef.current.getBodiesInRegion(checkBounds);
     
-    // Filter out the static ground body
     const blocksInArea = bodiesInArea.filter((body: Body) => !body.isStatic);
 
     if (blocksInArea.length > 0) {
@@ -44,10 +50,10 @@ export default function Home() {
         description: "Too close to another block. Find an empty space.",
         variant: "destructive",
       });
-      return; // Stop the drop
+      return;
     }
 
-    if (useBlock(blockId)) {
+    if (useBlockFromInventory(blockId)) {
         tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
     } else {
       toast({
@@ -59,8 +65,8 @@ export default function Home() {
   };
 
   const handleSpawnBlock = (blockId: string) => {
-    if (!team) return;
-    if (useBlock(blockId)) {
+    if (!team || !tetrisCanvasApiRef.current) return;
+    if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current?.spawnBlockForTeam(blockId, team);
     } else {
        toast({
@@ -72,21 +78,16 @@ export default function Home() {
   };
 
   const handleBlockTouchDrop = (blockId: string, clientX: number, clientY: number) => {
-    console.log("[touch drop] BLock:", blockId, "Position", clientX, clientY)
     const canvas = tetrisCanvasApiRef.current?.canvasElement;
-    if (!canvas  || !team ) return;
+    if (!canvas  || !team || !tetrisCanvasApiRef.current) return;
 
-    // Now use the DOM element (e.g., to get bounding box)
     const canvasRect = canvas.getBoundingClientRect();
-
-
-    // Calculate relative position inside canvas
     const xOnElement = clientX - canvasRect.left;
     const yOnElement = clientY - canvasRect.top;
 
     const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
 
-    if (useBlock(blockId)) {
+    if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
     } else {
       toast({
@@ -104,6 +105,14 @@ export default function Home() {
   const handleResetView = () => {
     tetrisCanvasApiRef.current?.resetView();
   };
+
+  if (loading || !user) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
