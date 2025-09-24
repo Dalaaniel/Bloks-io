@@ -42,7 +42,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const lastTouchPosition = useRef({ x: 0, y: 0 });
   const pinchZoomStartRef = useRef<{ distance: number; zoom: number } | null>(null);
 
-  const serializeBody = (body: Matter.Body): SerializedBody => {
+  const serializeBody = (body: CustomBody): SerializedBody => {
     return {
       id: body.id,
       label: body.label,
@@ -52,7 +52,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       velocity: { x: body.velocity.x, y: body.velocity.y },
       angularVelocity: body.angularVelocity,
       isStatic: body.isStatic,
-      parts: body.parts.filter(p => p.id !== body.id).map(serializeBody),
+      parts: body.parts.filter(p => p.id !== body.id).map(p => serializeBody(p as CustomBody)),
       restitution: body.restitution,
       friction: body.friction,
       render: {
@@ -68,7 +68,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     if (!engineRef.current) return null;
     const bodies = Matter.Composite.allBodies(engineRef.current.world)
       .filter(body => !body.isStatic) // Don't save the ground
-      .map(serializeBody);
+      .map(body => serializeBody(body as CustomBody));
     
     return {
       bodies,
@@ -77,25 +77,17 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     };
   };
 
-  const createBlockBody = (blockId: string, x: number, y: number, team: Team): Matter.Body | null => {
+  const createBlockBody = (blockId: string, x: number, y: number, team: Team): CustomBody | null => {
       const blockData = getBlockById(blockId, team);
       if (!blockData) return null;
 
       const scale = 2;
       const teamCategory = team === 'red' ? 0b0001 : 0b0010;
 
-      const compoundBody = Matter.Body.create({
-          mass: BLOCK_WEIGHT,
-          collisionFilter: {
-              category: teamCategory,
-              mask: 0b1111,
-          },
-      });
-
       const parts = blockData.parts.map(part => {
           const vertices = part.map(p => ({ x: p.x * scale, y: p.y * scale }));
           return Matter.Bodies.fromVertices(0, 0, [vertices], {
-              render: {
+               render: {
                   fillStyle: blockData.color,
                   strokeStyle: 'rgba(0,0,0,0.2)',
                   lineWidth: 2,
@@ -103,14 +95,22 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
           });
       });
       
-      Matter.Body.setParts(compoundBody, parts);
+      const compoundBody = Matter.Body.create({
+          mass: BLOCK_WEIGHT,
+          collisionFilter: {
+              category: teamCategory,
+              mask: 0b1111,
+          },
+          parts: parts,
+      });
+
       Matter.Body.setPosition(compoundBody, { x, y });
       compoundBody.label = `block-${team}-${blockId}`;
       
-      return compoundBody;
+      return compoundBody as CustomBody;
   }
 
-  const deserializeBody = (sBody: SerializedBody): Matter.Body => {
+  const deserializeBody = (sBody: SerializedBody): CustomBody => {
       const parts = sBody.parts.map(p => {
           const partBody = Matter.Bodies.fromVertices(p.position.x, p.position.y, [p.vertices], {
               render: p.render,
@@ -120,7 +120,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
           return partBody;
       });
 
-      const body = Matter.Body.create({
+      const body: CustomBody = Matter.Body.create({
           id: sBody.id,
           label: sBody.label,
           parts: [sBody, ...parts].length > 1 ? parts : [],
@@ -134,7 +134,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       });
 
       if(sBody.initialOverlapWhitelist) {
-        (body as CustomBody).initialOverlapWhitelist = new Set(sBody.initialOverlapWhitelist);
+        body.initialOverlapWhitelist = new Set(sBody.initialOverlapWhitelist);
       }
 
       // Re-apply render properties to parts
@@ -534,3 +534,5 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
+
+    
