@@ -22,8 +22,8 @@ interface AuthContextType {
   addBlockToInventory: (blockId: string) => void;
   useBlockFromInventory: (blockId: string) => boolean;
   returnBlockToInventory: (blockId: string) => void;
-  signUp: (email: string, password: string) => Promise<FirebaseUser>;
-  signIn: (email: string, password: string) => Promise<FirebaseUser>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   saveState: (state: SerializedCanvasState) => void;
 }
@@ -122,13 +122,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   const signUp = async (email: string, password: string) => {
-    const userCredential = await authSignUp(email, password);
-    return userCredential;
+    await authSignUp(email, password);
   };
 
   const signIn = async (email: string, password: string) => {
-    const userCredential = await authSignIn(email, password);
-    return userCredential;
+    await authSignIn(email, password);
   };
 
   const signOut = async () => {
