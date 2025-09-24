@@ -7,7 +7,7 @@ import { getBlockById, type Team, type BlockId } from '@/lib/blocks';
 import { useAuth, type SerializedCanvasState, type SerializedBody } from '@/context/auth-context';
 
 export interface TetrisCanvasApi {
-  addBlock: (blockId: BlockId, x: number, y: number, team: Team) => void;
+  addBlock: (blockId: string, x: number, y: number, team: Team) => void;
   spawnBlockForTeam: (blockId: string, team: Team) => void;
   getViewportCoordinates: (x: number, y: number) => { x: number, y: number };
   resetView: () => void;
@@ -104,6 +104,16 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
           parts: parts,
       });
 
+      // After creating the compound body, Matter.js might not preserve the render properties of the parts.
+      // We need to re-apply them.
+      Matter.Body.setParts(compoundBody, parts);
+      compoundBody.parts.forEach(part => {
+          part.render.fillStyle = blockData.color;
+          part.render.strokeStyle = 'rgba(0,0,0,0.2)';
+          part.render.lineWidth = 2;
+      });
+
+
       Matter.Body.setPosition(compoundBody, { x, y });
       compoundBody.label = `block-${team}-${blockId}`;
       
@@ -175,10 +185,10 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     }
   }, [canvasSize.width, canvasSize.height]);
 
-  const addBlock = (blockId: BlockId, x: number, y: number, team: Team) => {
+  const addBlock = (blockId: string, x: number, y: number, team: Team) => {
     const engine = engineRef.current;
     if (!engine) return;
-    const blockBody = createBlockBody(blockId, x, y, team);
+    const blockBody = createBlockBody(blockId as BlockId, x, y, team);
     if(blockBody) {
       Matter.World.add(engine.world, [blockBody]);
     }
@@ -534,5 +544,3 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
-
-    
