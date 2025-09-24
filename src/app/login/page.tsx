@@ -3,7 +3,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,13 +19,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleAuthAction = async (action: 'signIn' | 'signUp', team?: Team) => {
+  const handleAuthAction = async (action: 'signIn' | 'signUp') => {
     setLoading(true);
     try {
       if (action === 'signUp') {
-        if (!team) {
-          throw new Error('Team selection is required for sign up.');
-        }
+        const team: Team = Math.random() > 0.5 ? 'red' : 'blue';
         await signUp(email, password, team);
         toast({
           title: 'Sign Up Successful',
@@ -41,7 +38,7 @@ export default function LoginPage() {
       }
       router.push('/');
     } catch (error: any) {
-      console.error(error);
+      console.error('Auth Error:', error);
       toast({
         title: 'Authentication Failed',
         description: error.message || 'An unexpected error occurred.',
@@ -125,14 +122,9 @@ export default function LoginPage() {
                   disabled={loading}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <Button onClick={() => handleAuthAction('signUp', 'blue')} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                  {loading ? 'Joining...' : 'Join Blue Team'}
-                </Button>
-                <Button onClick={() => handleAuthAction('signUp', 'red')} disabled={loading} className="w-full bg-red-600 hover:bg-red-700 text-white">
-                  {loading ? 'Joining...' : 'Join Red Team'}
-                </Button>
-              </div>
+              <Button onClick={() => handleAuthAction('signUp')} disabled={loading} className="w-full">
+                {loading ? 'Creating Account...' : 'Sign Up'}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

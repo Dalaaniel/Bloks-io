@@ -22,13 +22,21 @@ export default function Home() {
   });
   // Default to blue, but will be updated based on user's team
   const [team, setTeam] = useState<Team>('blue');
+  const { toast } = useToast();
+  const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
 
   useEffect(() => {
-    if (user?.team) {
+    if (!loading && user) {
       setTeam(user.team);
     }
-  }, [user]);
+  }, [user, loading]);
 
+  const showSaveWarning = () => {
+    toast({
+      title: "Block placed!",
+      description: "Please wait 5 seconds for it to be saved.",
+    });
+  };
 
   const useBlockFromInventory = (blockId: string) => {
     if (ownedBlocks[blockId] && ownedBlocks[blockId] > 0) {
@@ -47,9 +55,6 @@ export default function Home() {
       [blockId]: (prev[blockId] || 0) + 1,
     }));
   };
-
-  const { toast } = useToast();
-  const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
 
   const checkAuth = () => {
     if (!user) {
@@ -96,6 +101,7 @@ export default function Home() {
 
     if (useBlockFromInventory(blockId)) {
         tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
+        showSaveWarning();
     } else {
       toast({
         title: "Out of Blocks",
@@ -109,6 +115,7 @@ export default function Home() {
     if (!checkAuth() || !tetrisCanvasApiRef.current) return;
     if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current?.spawnBlockForTeam(blockId, team);
+      showSaveWarning();
     } else {
        toast({
         title: "Out of Blocks",
@@ -132,6 +139,7 @@ export default function Home() {
 
     if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
+      showSaveWarning();
     } else {
       toast({
         title: "Out of Blocks",
