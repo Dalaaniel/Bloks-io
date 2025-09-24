@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { type User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { type UserProfile, signUp as authSignUp, signIn as authSignIn, signOut as authSignOut, getUserProfile } from '@/services/auth-service';
+import { type UserProfile, getUserProfile } from '@/services/auth-service';
 import { saveCanvasState, loadCanvasState } from '@/services/canvas-service';
 import { type Team } from '@/lib/blocks';
 import { type Body } from 'matter-js';
@@ -22,8 +22,6 @@ interface AuthContextType {
   addBlockToInventory: (blockId: string) => void;
   useBlockFromInventory: (blockId: string) => boolean;
   returnBlockToInventory: (blockId: string) => void;
-  signUp: (email: string, password: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   saveState: (state: SerializedCanvasState) => void;
 }
@@ -81,7 +79,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUserProfile(profile);
         } catch (error) {
           console.error("Failed to fetch user profile, signing out.", error);
-          await authSignOut();
+          await auth.signOut();
         } finally {
            setLoading(false);
         }
@@ -119,17 +117,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setSaveTimeout(timeout);
   };
 
-
-  const signUp = async (email: string, password: string) => {
-    return authSignUp(email, password);
-  };
-
-  const signIn = async (email: string, password: string) => {
-    return authSignIn(email, password);
-  };
-
   const signOut = async () => {
-    await authSignOut();
+    await auth.signOut();
   };
 
   // INVENTORY
@@ -169,8 +158,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     addBlockToInventory,
     useBlockFromInventory,
     returnBlockToInventory,
-    signUp,
-    signIn,
     signOut,
     canvasState,
     saveState,

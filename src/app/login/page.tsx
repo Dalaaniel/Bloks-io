@@ -10,12 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { signUp, signIn } from '@/services/auth-service';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp, signIn, user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   
@@ -34,7 +35,7 @@ export default function LoginPage() {
       } else {
         await signUp(email, password);
       }
-      // The useEffect will handle the redirect
+      // The useEffect will handle the redirect on successful auth state change
     } catch (error: any) {
       toast({
         title: 'Authentication Failed',
