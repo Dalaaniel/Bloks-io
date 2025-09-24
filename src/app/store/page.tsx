@@ -26,9 +26,10 @@ export default function StorePage() {
       return;
     }
 
+    const currentInventory = user.inventory || {};
     const newInventory: UserInventory = {
-      ...user.inventory,
-      [blockId as BlockId]: (user.inventory[blockId as BlockId] || 0) + 1,
+      ...currentInventory,
+      [blockId as BlockId]: (currentInventory[blockId as BlockId] || 0) + 1,
     };
 
     try {
