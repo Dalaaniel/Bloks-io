@@ -15,7 +15,8 @@ export async function saveCanvasState(state: any): Promise<void> {
     await setDoc(doc(db, CANVAS_STATE_COLLECTION_ID, CANVAS_STATE_DOC_ID), stateWithTimestamp);
   } catch (error) {
     console.error("Error saving canvas state: ", error);
-    throw new Error("Could not save canvas state.");
+    // We don't rethrow here to avoid crashing the app on a failed save.
+    // In a real app, you might want more robust error handling like retries or user notifications.
   }
 }
 
@@ -27,11 +28,13 @@ export async function loadCanvasState(): Promise<any | null> {
     if (docSnap.exists()) {
       return docSnap.data();
     } else {
-      console.log("No canvas state document found!");
+      console.log("No canvas state document found, starting fresh.");
       return null;
     }
   } catch (error) {
-    console.error("Error loading canvas state: ", error);
-    throw new Error("Could not load canvas state.");
+    console.error("Error loading canvas state (this is often a permissions issue): ", error);
+    // Don't throw an error, just return null to start with a fresh canvas.
+    // This prevents the app from crashing if Firestore rules are not set up.
+    return null;
   }
 }

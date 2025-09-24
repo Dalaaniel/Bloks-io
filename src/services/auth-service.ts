@@ -22,13 +22,22 @@ export async function signUp(email: string, password: string): Promise<UserProfi
   // Assign team to new user
   const usersRef = collection(db, 'users');
   const q = query(usersRef, orderBy('team', 'desc'), limit(1));
-  const querySnapshot = await getDocs(q);
   
   let newTeam: Team = 'blue';
-  if (!querySnapshot.empty) {
-    const lastUser = querySnapshot.docs[0].data();
-    newTeam = lastUser.team === 'blue' ? 'red' : 'blue';
+  try {
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      const lastUser = querySnapshot.docs[0].data();
+      if (lastUser.team) {
+        newTeam = lastUser.team === 'blue' ? 'red' : 'blue';
+      }
+    }
+  } catch (error) {
+      // This can happen if the collection doesn't exist yet or rules are wrong.
+      // Defaulting to 'blue' is a safe fallback.
+      console.error("Could not determine team, defaulting to blue. Error: ", error);
   }
+
 
   const userProfile: UserProfile = {
     uid: user.uid,
