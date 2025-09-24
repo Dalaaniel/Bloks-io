@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -26,7 +27,12 @@ export async function loadCanvasState(): Promise<any | null> {
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-      return docSnap.data();
+      const data = docSnap.data();
+      // The `updatedAt` field is a Firestore Timestamp object, which is not a
+      // plain serializable object and cannot be passed from Server to Client Components.
+      // We don't use it on the client, so we can safely delete it.
+      delete data.updatedAt;
+      return data;
     } else {
       console.log("No canvas state document found, starting fresh.");
       return null;
