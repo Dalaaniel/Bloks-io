@@ -3,7 +3,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { getUserProfile, type UserProfile } from '@/services/auth-service';
 import { useRouter } from 'next/navigation';
 
@@ -23,30 +24,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        try {
-          const userProfile = await getUserProfile(firebaseUser.uid);
-          if (userProfile) {
+        // User is signed in, now listen for profile changes
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        const unsubscribeProfile = onSnapshot(userDocRef, (doc) => {
+          if (doc.exists()) {
+            const userProfile = doc.data() as UserProfile;
             setUser({ ...firebaseUser, ...userProfile });
           } else {
-            // Profile doesn't exist, this might be right after sign-up.
-            // For now, we sign them out to force a clean login.
-            // A better user experience would be to create the profile if it's missing.
-             setUser(null); // Or handle as a partial user
+            // This case might happen if the user document is deleted, or right after signup
+            // and before the document is created.
+            console.warn(`No user profile found for UID: ${firebaseUser.uid}`);
+            setUser(null);
           }
-        } catch (error) {
-          console.error("Failed to fetch user profile:", error);
-          setUser(null); // Ensure user is null if profile fetch fails
-        }
+          setLoading(false);
+        }, (error) => {
+           console.error("Failed to fetch user profile:", error);
+           setUser(null);
+           setLoading(false);
+        });
+
+        // Return a cleanup function for the profile listener
+        return () => unsubscribeProfile();
+
       } else {
+        // User is signed out
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Return a cleanup function for the auth state listener
+    return () => unsubscribeAuth();
   }, []);
 
   const signOut = async () => {

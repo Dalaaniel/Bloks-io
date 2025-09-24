@@ -6,7 +6,6 @@ import BlockCard from '@/components/store/block-card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { updateUserInventory, type UserInventory } from '@/services/auth-service';
 
@@ -14,18 +13,11 @@ export default function StorePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const [inventory, setInventory] = useState<UserInventory | null>(null);
-
-  useEffect(() => {
-    if (!loading && user) {
-      setInventory(user.inventory);
-    }
-  }, [user, loading]);
 
   const storeBlocks = getAllStoreBlocks();
 
   const handleBuyBlock = async (blockId: string) => {
-    if (!user || !inventory) {
+    if (!user) {
       toast({
         title: "Login Required",
         description: "You must be logged in to purchase items.",
@@ -34,14 +26,16 @@ export default function StorePage() {
       return;
     }
 
-    const newInventory = {
-      ...inventory,
-      [blockId as BlockId]: (inventory[blockId as BlockId] || 0) + 1,
+    const newInventory: UserInventory = {
+      ...user.inventory,
+      [blockId as BlockId]: (user.inventory[blockId as BlockId] || 0) + 1,
     };
 
     try {
       await updateUserInventory(user.uid, newInventory);
-      setInventory(newInventory); // Update local state to reflect purchase
+      // The user object in context will be updated automatically by the onSnapshot listener,
+      // but for immediate UI feedback, we can optimistically update it or refetch.
+      // For now, the app relies on listeners but a manual refresh could be added to useAuth.
       toast({
         title: "Purchase Successful!",
         description: `A new block has been added to your inventory.`,
