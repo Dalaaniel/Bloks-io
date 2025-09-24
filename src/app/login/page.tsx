@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { signIn, signUp } from '@/services/auth-service';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -18,42 +18,49 @@ export default function LoginPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  
+
   useEffect(() => {
-    // If the user is already logged in (e.g. they have a valid session cookie),
-    // redirect them away from the login page.
+    // If the user is already logged in, redirect them away from the login page.
     if (!authLoading && user) {
       router.push('/');
     }
   }, [user, authLoading, router]);
 
-
   const handleAuthAction = async (action: 'signIn' | 'signUp') => {
     setLoading(true);
-    const endpoint = action === 'signIn' ? '/api/login' : '/api/signup';
+    const authFn = action === 'signIn' ? signIn : signUp;
 
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'An unexpected error occurred.');
-      }
-      
-      // On successful API call, we need to inform the client-side app.
-      // A full page reload is the most reliable way to ensure all contexts
-      // and SDKs are re-initialized with the new auth state.
-      window.location.href = '/';
-
+      await authFn(email, password);
+      // onAuthStateChanged in AuthProvider will handle the user state change
+      // and the useEffect above will trigger the redirect.
+      // No need for window.location.reload or router.push here.
     } catch (error: any) {
+      let errorMessage = 'An unexpected error occurred.';
+      // Handle Firebase Auth error codes
+      if (error.code) {
+        switch (error.code) {
+          case 'auth/user-not-found':
+          case 'auth/wrong-password':
+          case 'auth/invalid-credential':
+            errorMessage = 'Invalid email or password.';
+            break;
+          case 'auth/email-already-in-use':
+            errorMessage = 'This email is already registered.';
+            break;
+          case 'auth/weak-password':
+            errorMessage = 'The password is too weak. It must be at least 6 characters long.';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'Too many login attempts. Please try again later.';
+            break;
+          default:
+            errorMessage = error.message;
+        }
+      }
       toast({
         title: 'Authentication Failed',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -112,7 +119,7 @@ export default function LoginPage() {
                 <Input id="signup-email" type="email" placeholder="m@example.com" value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="signup-password">Password</Label>                
+                <Label htmlFor="signup-password">Password</Label>
                 <Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading} />
               </div>
             </CardContent>

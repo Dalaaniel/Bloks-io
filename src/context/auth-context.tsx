@@ -1,5 +1,4 @@
-
-"use client";
+'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { type User as FirebaseUser } from 'firebase/auth';
@@ -74,11 +73,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         try {
+          // Fetch profile every time auth state changes to ensure it's fresh
           const profile = await getUserProfile(firebaseUser.uid);
           setUserProfile(profile);
         } catch (error) {
           console.error("Failed to fetch user profile, signing out.", error);
           await authServiceSignOut();
+          setUser(null);
+          setUserProfile(null);
         }
       } else {
         setUser(null);
@@ -115,9 +117,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
-    // Clear the session cookie by calling a dedicated API route
-    await fetch('/api/logout', { method: 'POST' });
     await authServiceSignOut();
+    setUser(null);
+    setUserProfile(null);
   };
 
   // INVENTORY
