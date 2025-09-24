@@ -73,18 +73,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // AUTH and USER PROFILE
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-      setUser(firebaseUser);
+      setLoading(true);
       if (firebaseUser) {
-        getUserProfile(firebaseUser.uid)
-          .then(profile => {
-            setUserProfile(profile);
-            setLoading(false);
-          })
-          .catch(async (e) => {
-            console.error("Failed to fetch user profile, signing out.", e);
-            await authSignOut();
-          });
+        // User is signed in.
+        try {
+          const profile = await getUserProfile(firebaseUser.uid);
+          setUserProfile(profile);
+          setUser(firebaseUser);
+        } catch (error) {
+          console.error("Failed to fetch user profile, signing out.", error);
+          await authSignOut(); // This will trigger onAuthStateChanged again
+        } finally {
+           setLoading(false);
+        }
       } else {
+        // User is signed out.
+        setUser(null);
         setUserProfile(null);
         setLoading(false);
       }
@@ -129,9 +133,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     await authSignOut();
-    setUser(null);
-    setUserProfile(null);
-    setLoading(true); // Set loading to true to show spinner while state clears
   };
 
   // INVENTORY
