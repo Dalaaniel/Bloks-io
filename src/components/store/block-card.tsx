@@ -1,8 +1,8 @@
+
 "use client";
 
-import { CreditCard, ShoppingCart } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
 import { type TetrisBlock } from "@/lib/blocks";
-import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import TetrisBlockComponent from "@/components/tetris-block";
@@ -10,17 +10,17 @@ import { useToast } from "@/hooks/use-toast";
 
 interface BlockCardProps {
   block: TetrisBlock;
+  onBuy: (blockId: string) => void;
 }
 
-export default function BlockCard({ block }: BlockCardProps) {
-  const { addBlockToInventory } = useAuth();
+export default function BlockCard({ block, onBuy }: BlockCardProps) {
   const { toast } = useToast();
 
   const handleBuy = () => {
-    addBlockToInventory(block.id);
+    onBuy(block.id);
     toast({
       title: "Purchase Successful!",
-      description: `A new ${block.name} has been added to your inventory.`,
+      description: `A new ${block.name} has been added to your inventory. (Feature in development)`,
     });
   };
 

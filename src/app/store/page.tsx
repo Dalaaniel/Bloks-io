@@ -1,33 +1,22 @@
 
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/auth-context';
 import { getAllStoreBlocks } from '@/lib/blocks';
 import BlockCard from '@/components/store/block-card';
-import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 export default function StorePage() {
   const storeBlocks = getAllStoreBlocks();
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { toast } = useToast();
 
-  if (loading) {
-    return null; // or a loading spinner
-  }
-
-  if (!user) {
-    return (
-      <main className="container py-8 text-center">
-        <h1 className="text-4xl font-bold tracking-tight lg:text-5xl">Access Denied</h1>
-        <p className="mt-4 text-lg text-muted-foreground">
-          You must be logged in to access the block store.
-        </p>
-        <Button className="mt-6" onClick={() => router.push('/login')}>
-          Go to Login
-        </Button>
-      </main>
-    );
+  const handleBuyBlock = (blockId: string) => {
+    console.log(`Bought block: ${blockId}`);
+    toast({
+      title: "Purchase Successful!",
+      description: `A new block has been added to your inventory.`,
+    });
+    // This is a placeholder. In a real app with state management,
+    // you would update a shared inventory state here.
   }
 
   return (
@@ -40,7 +29,7 @@ export default function StorePage() {
       </div>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {storeBlocks.map(block => (
-          <BlockCard key={block.id} block={block} />
+          <BlockCard key={block.id} block={block} onBuy={handleBuyBlock} />
         ))}
       </div>
     </main>

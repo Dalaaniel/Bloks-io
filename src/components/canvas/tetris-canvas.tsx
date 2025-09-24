@@ -4,7 +4,6 @@
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import Matter, { IEventCollision, type Body, Bounds, Vector } from 'matter-js';
 import { getBlockById, type Team, type BlockId } from '@/lib/blocks';
-import { useAuth, type SerializedCanvasState, type SerializedBody } from '@/context/auth-context';
 
 export interface TetrisCanvasApi {
   addBlock: (blockId: string, x: number, y: number, team: Team) => void;
@@ -23,7 +22,39 @@ interface CustomBody extends Body {
   initialOverlapWhitelist?: Set<number>;
 }
 
-const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
+// Dummy serialization interfaces for type consistency, not used for saving state anymore.
+export interface SerializedBody {
+  id: number;
+  label: string;
+  position: { x: number; y: number };
+  angle: number;
+  vertices: { x: number, y: number }[];
+  velocity: { x: number; y: number };
+  angularVelocity: number;
+  isStatic: boolean;
+  parts: SerializedBody[];
+  restitution: number;
+  friction: number;
+  render: {
+    fillStyle?: string;
+    strokeStyle?: string;
+    lineWidth?: number;
+  };
+   initialOverlapWhitelist?: number[];
+}
+
+export interface SerializedCanvasState {
+  bodies: SerializedBody[];
+  zoom: number;
+  viewCenter: { x: number; y: number };
+}
+
+
+interface TetrisCanvasProps {
+  team: Team;
+}
+
+const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const starsCanvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine>();
@@ -32,50 +63,14 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
   const mouseConstraintRef = useRef<Matter.MouseConstraint>();
 
   const [canvasSize] = useState({ width: 100000, height: 30000 });
-
-  const { team, zoom, setZoom, canvasState, saveState } = useAuth();
+  const [zoom, setZoom] = useState(0.5);
 
   const dragModeRef = useRef<DragMode>('none');
   const lastMousePosition = useRef({ x: 0, y: 0 });
-  const viewCenter = useRef(canvasState?.viewCenter || { x: canvasSize.width / 2, y: canvasSize.height - 1000 });
+  const viewCenter = useRef({ x: canvasSize.width / 2, y: canvasSize.height - 1000 });
   const zoomStartRef = useRef({ y: 0, zoom: 1 });
   const lastTouchPosition = useRef({ x: 0, y: 0 });
   const pinchZoomStartRef = useRef<{ distance: number; zoom: number } | null>(null);
-
-  const serializeBody = (body: CustomBody): SerializedBody => {
-    return {
-      id: body.id,
-      label: body.label,
-      position: { x: body.position.x, y: body.position.y },
-      angle: body.angle,
-      vertices: body.vertices.map(v => ({ x: v.x, y: v.y })),
-      velocity: { x: body.velocity.x, y: body.velocity.y },
-      angularVelocity: body.angularVelocity,
-      isStatic: body.isStatic,
-      parts: body.parts.filter(p => p.id !== body.id).map(p => serializeBody(p as CustomBody)),
-      restitution: body.restitution,
-      friction: body.friction,
-      render: {
-          fillStyle: body.render.fillStyle,
-          strokeStyle: body.render.strokeStyle,
-          lineWidth: body.render.lineWidth,
-      },
-      initialOverlapWhitelist: body.initialOverlapWhitelist ? Array.from(body.initialOverlapWhitelist) : undefined,
-    };
-  };
-
-  const serializeState = () => {
-    if (!engineRef.current) return null;
-    const bodies = Matter.Composite.allBodies(engineRef.current.world)
-      .filter(body => !body.isStatic) // Don't save the ground
-      .map(body => serializeBody(body as CustomBody));
-    
-    return {
-      bodies,
-      zoom,
-      viewCenter: viewCenter.current,
-    };
-  };
 
   const createBlockBody = (blockId: string, x: number, y: number, team: Team): CustomBody | null => {
       const blockData = getBlockById(blockId, team);
@@ -104,8 +99,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
           parts: parts,
       });
 
-      // After creating the compound body, Matter.js might not preserve the render properties of the parts.
-      // We need to re-apply them.
       Matter.Body.setParts(compoundBody, parts);
       compoundBody.parts.forEach(part => {
           part.render.fillStyle = blockData.color;
@@ -119,53 +112,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
       
       return compoundBody as CustomBody;
   }
-
-  const deserializeBody = (sBody: SerializedBody): CustomBody => {
-      const parts = sBody.parts.map(p => {
-          const partBody = Matter.Bodies.fromVertices(p.position.x, p.position.y, [p.vertices], {
-              render: p.render,
-              isStatic: p.isStatic,
-          }, true);
-          Matter.Body.setAngle(partBody, p.angle);
-          return partBody;
-      });
-
-      const body: CustomBody = Matter.Body.create({
-          id: sBody.id,
-          label: sBody.label,
-          parts: [sBody, ...parts].length > 1 ? parts : [],
-          position: sBody.position,
-          angle: sBody.angle,
-          velocity: sBody.velocity,
-          angularVelocity: sBody.angularVelocity,
-          isStatic: sBody.isStatic,
-          restitution: sBody.restitution,
-          friction: sBody.friction,
-      });
-
-      if(sBody.initialOverlapWhitelist) {
-        body.initialOverlapWhitelist = new Set(sBody.initialOverlapWhitelist);
-      }
-
-      // Re-apply render properties to parts
-      if (body.parts.length > 1) {
-        body.parts.forEach((part, i) => {
-            // The first part is the body itself, skip it
-            if (i > 0) {
-                 part.render.fillStyle = sBody.render.fillStyle;
-                 part.render.strokeStyle = sBody.render.strokeStyle;
-                 part.render.lineWidth = sBody.render.lineWidth;
-            }
-        });
-      } else {
-        body.render.fillStyle = sBody.render.fillStyle;
-        body.render.strokeStyle = sBody.render.strokeStyle;
-        body.render.lineWidth = sBody.render.lineWidth;
-      }
-      
-      return body;
-  };
-
 
   useEffect(() => {
     const starsCanvas = starsCanvasRef.current;
@@ -272,14 +218,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     renderRef.current = render;
     World.add(world, Bodies.rectangle(canvasSize.width / 2, canvasSize.height - 30, canvasSize.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' }, collisionFilter: { category: 0b0100 } }));
     
-    // Restore state
-    if (canvasState) {
-        viewCenter.current = canvasState.viewCenter;
-        setZoom(canvasState.zoom);
-        const bodies = canvasState.bodies.map(deserializeBody);
-        World.add(world, bodies);
-    }
-
 
     const mouse = Mouse.create(render.canvas);
     mouseRef.current = mouse;
@@ -356,18 +294,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi>((_props, ref) => {
     };
     window.addEventListener('resize', handleResize);
 
-    // Save state on unload
-    const beforeUnload = () => {
-        const state = serializeState();
-        if(state) saveState(state as SerializedCanvasState);
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-
-
     return () => {
-      // Save state before cleanup
-      beforeUnload();
-      window.removeEventListener('beforeunload', beforeUnload);
       window.removeEventListener('resize', handleResize);
       Render.stop(render);
       Runner.stop(runner);

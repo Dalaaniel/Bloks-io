@@ -1,37 +1,46 @@
 
 "use client";
 
-import React, { useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/auth-context';
+import React, { useRef, useState } from 'react';
 import Inventory from '@/components/canvas/inventory';
 import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-canvas';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { CornerUpLeft, Loader } from 'lucide-react';
+import { CornerUpLeft } from 'lucide-react';
 import { type Body } from 'matter-js';
+import { type Team } from '@/lib/blocks';
 
 export default function Home() {
-  const { useBlockFromInventory, team, loading, user } = useAuth();
+  const [ownedBlocks, setOwnedBlocks] = useState<{ [key: string]: number }>({
+    i: 5, o: 5, t: 5, l: 5, j: 5, s: 5, z: 5,
+  });
+  const team: Team = 'blue';
+
+  const useBlockFromInventory = (blockId: string) => {
+    if (ownedBlocks[blockId] && ownedBlocks[blockId] > 0) {
+      setOwnedBlocks(prev => ({
+        ...prev,
+        [blockId]: prev[blockId] - 1,
+      }));
+      return true;
+    }
+    return false;
+  };
+
+  const addBlockToInventory = (blockId: string) => {
+    setOwnedBlocks(prev => ({
+      ...prev,
+      [blockId]: (prev[blockId] || 0) + 1,
+    }));
+  };
+
   const { toast } = useToast();
-  const router = useRouter();
   const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
 
-  const showLoginPrompt = () => {
-    toast({
-      title: "Login Required",
-      description: "Please log in to interact with the canvas.",
-      variant: "destructive",
-    });
-  };
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    if (!user) {
-      showLoginPrompt();
-      return;
-    }
-    if (!team || !tetrisCanvasApiRef.current) return;
+    if (!tetrisCanvasApiRef.current) return;
     const blockId = event.dataTransfer.getData("application/tetris-block");
     if (!blockId) return;
 
@@ -71,11 +80,7 @@ export default function Home() {
   };
 
   const handleSpawnBlock = (blockId: string) => {
-    if (!user) {
-      showLoginPrompt();
-      return;
-    }
-    if (!team || !tetrisCanvasApiRef.current) return;
+    if (!tetrisCanvasApiRef.current) return;
     if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current?.spawnBlockForTeam(blockId, team);
     } else {
@@ -88,12 +93,8 @@ export default function Home() {
   };
 
   const handleBlockTouchDrop = (blockId: string, clientX: number, clientY: number) => {
-    if (!user) {
-      showLoginPrompt();
-      return;
-    }
     const canvas = tetrisCanvasApiRef.current?.canvasElement;
-    if (!canvas  || !team || !tetrisCanvasApiRef.current) return;
+    if (!canvas  || !tetrisCanvasApiRef.current) return;
 
     const canvasRect = canvas.getBoundingClientRect();
     const xOnElement = clientX - canvasRect.left;
@@ -120,24 +121,25 @@ export default function Home() {
     tetrisCanvasApiRef.current?.resetView();
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader className="h-8 w-8 animate-spin" />
-      </div>
-    );
+  const handleBuyBlock = (blockId: string) => {
+    addBlockToInventory(blockId);
   }
 
   return (
     <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
-      <Inventory onBlockClick={handleSpawnBlock} onBlockTouchDrop={handleBlockTouchDrop} />
+      <Inventory 
+        ownedBlocks={ownedBlocks}
+        team={team}
+        onBlockClick={handleSpawnBlock} 
+        onBlockTouchDrop={handleBlockTouchDrop} 
+      />
 
       <div 
         className="flex-1 relative bg-background"
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
-        <TetrisCanvas ref={tetrisCanvasApiRef} />
+        <TetrisCanvas ref={tetrisCanvasApiRef} team={team} />
         <Button 
           variant="outline" 
           size="icon" 

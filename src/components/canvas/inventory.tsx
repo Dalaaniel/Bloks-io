@@ -1,27 +1,24 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useAuth } from "@/context/auth-context";
+import React, { useState } from "react";
 import { getBlockById, type Team } from "@/lib/blocks";
 import TetrisBlockComponent from "@/components/tetris-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
 
 interface InventoryProps {
+  ownedBlocks: { [key: string]: number };
+  team: Team;
   onBlockClick: (blockId: string) => void;
   onBlockTouchDrop?: (blockId: string, x: number, y: number) => void;
 }
 
-export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryProps) {
-  const { ownedBlocks, team, user } = useAuth();
-
+export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouchDrop }: InventoryProps) {
   const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
   const [touchPosition, setTouchPosition] = useState<{ x: number; y: number } | null>(null);
 
-  const draggingBlock = draggingBlockId && team ? getBlockById(draggingBlockId, team) : undefined;
+  const draggingBlock = draggingBlockId ? getBlockById(draggingBlockId, team) : undefined;
 
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>, blockId: string) => {
     event.dataTransfer.setData("application/tetris-block", blockId);
@@ -52,38 +49,15 @@ export default function Inventory({ onBlockClick, onBlockTouchDrop }: InventoryP
 
   const availableBlocks = Object.entries(ownedBlocks)
     .map(([id, quantity]) => {
-      const block = getBlockById(id, team || "blue");
+      const block = getBlockById(id, team);
       return { block, quantity };
     })
     .filter((item) => item.block && item.quantity > 0);
 
-  if (!user || !team) {
-    return (
-      <aside className="w-48 border-r bg-secondary/50 flex flex-col">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold tracking-tight">Inventory</h2>
-        </div>
-        <div className="p-4 flex-1 flex flex-col items-center justify-center text-center text-sm text-muted-foreground">
-          <p className="mb-4">Please log in to see your inventory and place blocks.</p>
-          <Button asChild>
-            <Link href="/login">Login</Link>
-          </Button>
-        </div>
-      </aside>
-    );
-  }
-
   return (
     <aside className="w-48 border-r bg-secondary/50 flex flex-col relative">
-      <div className="p-4 border-b flex justify-between items-center">
+      <div className="p-4 border-b">
         <h2 className="text-lg font-semibold tracking-tight">Inventory</h2>
-        <span
-          className={`px-2 py-1 text-xs font-bold rounded-full ${
-            team === "red" ? "bg-red-500 text-white" : "bg-blue-500 text-white"
-          }`}
-        >
-          {team.toUpperCase()}
-        </span>
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-2">
