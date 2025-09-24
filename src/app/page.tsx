@@ -3,7 +3,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import Inventory from '@/components/canvas/inventory';
-import TetrisCanvas, { type TetrisCanvasApi, getTeamZone } from '@/components/canvas/tetris-canvas';
+import TetrisCanvas, { type TetrisCanvasApi, getZone } from '@/components/canvas/tetris-canvas';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { CornerUpLeft } from 'lucide-react';
