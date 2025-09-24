@@ -586,5 +586,3 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
-
-    
