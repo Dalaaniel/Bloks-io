@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
@@ -6,6 +7,8 @@ import { getBlockById, type Team, type BlockId } from '@/lib/blocks';
 import { onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { saveCanvasState } from '@/services/canvas-service';
+import { type User } from '@/context/auth-context';
+
 
 export interface TetrisCanvasApi {
   addBlock: (blockId: string, x: number, y: number, team: Team) => void;
@@ -53,10 +56,11 @@ export interface SerializedCanvasState {
 
 
 interface TetrisCanvasProps {
+  user: User | null;
   team: Team;
 }
 
-const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, ref) => {
+const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, team }, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const starsCanvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine>();
@@ -278,30 +282,34 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     World.add(world, [blueZoneBody, redZoneBody]);
     
     // Real-time listener for canvas state
-    const canvasDocRef = doc(db, 'canvasState', 'singleton');
-    const unsubscribe = onSnapshot(canvasDocRef, (docSnap) => {
-        if (!docSnap.exists() || !engineRef.current) return;
+    let unsubscribe: (() => void) | null = null;
+    if (user) {
+      const canvasDocRef = doc(db, 'canvasState', 'singleton');
+      unsubscribe = onSnapshot(canvasDocRef, (docSnap) => {
+          if (!docSnap.exists() || !engineRef.current) return;
 
-        // Do not update if a user is currently dragging a block
-        if (mouseConstraintRef.current?.body) {
-            return;
-        }
+          // Do not update if a user is currently dragging a block
+          if (mouseConstraintRef.current?.body) {
+              return;
+          }
 
-        const state = docSnap.data()?.state as SerializedCanvasState;
-        if (state) {
-            // Remove all non-static bodies
-            Composite.allBodies(engineRef.current.world).forEach(body => {
-                if (!body.isStatic) {
-                    World.remove(engineRef.current!.world, body);
-                }
-            });
+          const state = docSnap.data()?.state as SerializedCanvasState;
+          if (state) {
+              // Remove all non-static bodies
+              Composite.allBodies(engineRef.current.world).forEach(body => {
+                  if (!body.isStatic) {
+                      World.remove(engineRef.current!.world, body);
+                  }
+              });
 
-            // Add bodies from the new state
-            const bodies = state.bodies.map(sBody => deserializeBody(sBody, team));
-            World.add(engineRef.current.world, bodies);
-        }
-    });
-
+              // Add bodies from the new state
+              const bodies = state.bodies.map(sBody => deserializeBody(sBody, team));
+              World.add(engineRef.current.world, bodies);
+          }
+      }, (error) => {
+        console.error("Firestore snapshot listener error:", error);
+      });
+    }
     
     // Save state periodically
     const saveInterval = setInterval(() => {
@@ -394,7 +402,25 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     Events.on(engine, 'beforeUpdate', () => {
       const mc = mouseConstraintRef.current;
       if (!mc || !mc.body) return;
+
       const draggedBody: CustomBody = mc.body;
+      
+      // Prevent dragging into invalid zones
+      if(apiRef.current) {
+        const { blueZone, redZone } = apiRef.current.getZones();
+        const currentTeam = team;
+        const bodyPos = draggedBody.position;
+        
+        if (currentTeam === 'blue' && bodyPos.x > redZone.min.x) {
+            mc.constraint.bodyB = null;
+            return;
+        }
+        if (currentTeam === 'red' && bodyPos.x < blueZone.max.x) {
+            mc.constraint.bodyB = null;
+            return;
+        }
+      }
+
       if (draggedBody.initialOverlapWhitelist === undefined) return;
 
       const allOtherBodies = Composite.allBodies(engine.world).filter(
@@ -430,7 +456,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     window.addEventListener('resize', handleResize);
 
     return () => {
-      unsubscribe(); // Stop listening to real-time updates
+      if (unsubscribe) unsubscribe(); // Stop listening to real-time updates
       clearInterval(saveInterval);
       window.removeEventListener('resize', handleResize);
       Render.stop(render);
@@ -441,7 +467,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
       if (render.textures) render.textures = {};
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     updateCamera();

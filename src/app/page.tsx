@@ -101,13 +101,12 @@ export default function Home() {
   }
 
   const isPlacementInValidZone = (x: number, team: Team) => {
-    if (!tetrisCanvasApiRef.current) return false;
-    const { blueZone, redZone } = tetrisCanvasApiRef.current.getZones();
-    if (team === 'blue' && x > redZone.min.x) {
-        return false;
+    const targetZone = getTeamZone(x);
+    if (team === 'blue' && targetZone === 'red') {
+      return false;
     }
-    if (team === 'red' && x < blueZone.max.x) {
-        return false;
+    if (team === 'red' && targetZone === 'blue') {
+      return false;
     }
     return true;
   }
@@ -124,8 +123,7 @@ export default function Home() {
     const yOnElement = event.clientY - canvasRect.top;
     const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
 
-    const targetZone = getTeamZone(worldCoords.x);
-    if ((targetZone === 'red' && team !== 'red') || (targetZone === 'blue' && team !== 'blue')) {
+    if (!isPlacementInValidZone(worldCoords.x, team)) {
       toast({ title: "Placement Invalid", description: "You cannot place blocks in an opponent's zone.", variant: "destructive" });
       return;
     }
@@ -188,12 +186,10 @@ export default function Home() {
 
     const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
 
-     const targetZone = getTeamZone(worldCoords.x);
-    if ((targetZone === 'red' && team !== 'red') || (targetZone === 'blue' && team !== 'blue')) {
+    if (!isPlacementInValidZone(worldCoords.x, team)) {
       toast({ title: "Placement Invalid", description: "You cannot place blocks in an opponent's zone.", variant: "destructive" });
       return;
     }
-
 
     if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
@@ -229,7 +225,7 @@ export default function Home() {
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
-        <TetrisCanvas ref={tetrisCanvasApiRef} team={team} />
+        <TetrisCanvas ref={tetrisCanvasApiRef} user={user} team={team} />
         <div className="absolute top-4 left-4 z-10 flex gap-2">
           <Button 
             variant="outline" 
