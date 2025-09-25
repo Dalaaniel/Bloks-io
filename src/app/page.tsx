@@ -12,6 +12,22 @@ import { type Team, type BlockId } from '@/lib/blocks';
 import { useAuth } from '@/context/auth-context';
 import { updateUserInventory, type UserInventory } from '@/services/auth-service';
 
+const CANVAS_WIDTH = 100000;
+type Zone = 'blue' | 'red' | 'no-mans-land';
+
+const getTeamZone = (x: number): Zone => {
+  const blueZoneWidth = CANVAS_WIDTH * 0.2;
+  const noMansLandWidth = CANVAS_WIDTH * 0.6;
+  
+  if (x < blueZoneWidth) {
+    return 'blue';
+  } else if (x < blueZoneWidth + noMansLandWidth) {
+    return 'no-mans-land';
+  } else {
+    return 'red';
+  }
+};
+
 export default function Home() {
   const { user, loading } = useAuth();
   const [ownedBlocks, setOwnedBlocks] = useState<UserInventory>({
@@ -109,12 +125,8 @@ export default function Home() {
     const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
 
     const targetZone = getTeamZone(worldCoords.x);
-    if (targetZone === 'red' && team !== 'red') {
-      toast({ title: "Placement Invalid", description: "You cannot place blocks in the red team's zone.", variant: "destructive" });
-      return;
-    }
-    if (targetZone === 'blue' && team !== 'blue') {
-      toast({ title: "Placement Invalid", description: "You cannot place blocks in the blue team's zone.", variant: "destructive" });
+    if ((targetZone === 'red' && team !== 'red') || (targetZone === 'blue' && team !== 'blue')) {
+      toast({ title: "Placement Invalid", description: "You cannot place blocks in an opponent's zone.", variant: "destructive" });
       return;
     }
     
@@ -177,12 +189,8 @@ export default function Home() {
     const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
 
      const targetZone = getTeamZone(worldCoords.x);
-    if (targetZone === 'red' && team !== 'red') {
-      toast({ title: "Placement Invalid", description: "You cannot place blocks in the red team's zone.", variant: "destructive" });
-      return;
-    }
-    if (targetZone === 'blue' && team !== 'blue') {
-      toast({ title: "Placement Invalid", description: "You cannot place blocks in the blue team's zone.", variant: "destructive" });
+    if ((targetZone === 'red' && team !== 'red') || (targetZone === 'blue' && team !== 'blue')) {
+      toast({ title: "Placement Invalid", description: "You cannot place blocks in an opponent's zone.", variant: "destructive" });
       return;
     }
 
