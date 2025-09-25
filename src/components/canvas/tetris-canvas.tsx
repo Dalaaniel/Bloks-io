@@ -237,6 +237,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
       return Matter.Bodies.rectangle(sBody.position.x, sBody.position.y, 80, 80);
     }
     
+    // IMPORTANT: Set the ID from the serialized data
+    newBody.id = sBody.id;
+    
     Matter.Body.setAngle(newBody, sBody.angle);
     Matter.Body.setVelocity(newBody, sBody.velocity);
     Matter.Body.setAngularVelocity(newBody, sBody.angularVelocity);
@@ -287,24 +290,37 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
       const canvasDocRef = doc(db, 'canvasState', 'singleton');
       unsubscribe = onSnapshot(canvasDocRef, (docSnap) => {
           if (!docSnap.exists() || !engineRef.current) return;
-
-          // Do not update if a user is currently dragging a block
-          if (mouseConstraintRef.current?.body) {
-              return;
-          }
+          if (mouseConstraintRef.current?.body) return;
 
           const state = docSnap.data()?.state as SerializedCanvasState;
           if (state) {
-              // Remove all non-static bodies
-              Composite.allBodies(engineRef.current.world).forEach(body => {
-                  if (!body.isStatic) {
-                      World.remove(engineRef.current!.world, body);
-                  }
+              const currentWorld = engineRef.current.world;
+              const existingBodyIds = new Set(Composite.allBodies(currentWorld).map(b => b.id));
+
+              const bodiesToAdd = state.bodies
+                  .filter(sBody => !existingBodyIds.has(sBody.id))
+                  .map(sBody => deserializeBody(sBody, team));
+
+              if (bodiesToAdd.length > 0) {
+                  World.add(currentWorld, bodiesToAdd);
+              }
+
+              // Optional: Update positions for existing bodies, but be careful
+              state.bodies.forEach(sBody => {
+                const existingBody = Composite.allBodies(currentWorld).find(b => b.id === sBody.id);
+                if (existingBody && !Matter.Sleeping.isSleeping(existingBody)) {
+                   // Only update if it's not being interacted with locally, maybe?
+                   // This is complex logic. For now, let's just add new ones.
+                }
               });
 
-              // Add bodies from the new state
-              const bodies = state.bodies.map(sBody => deserializeBody(sBody, team));
-              World.add(engineRef.current.world, bodies);
+              // Optional: Remove bodies that are no longer in the state
+              const stateBodyIds = new Set(state.bodies.map(b => b.id));
+              Composite.allBodies(currentWorld).forEach(body => {
+                  if (!body.isStatic && !stateBodyIds.has(body.id)) {
+                      World.remove(currentWorld, body);
+                  }
+              });
           }
       }, (error) => {
         console.error("Firestore snapshot listener error:", error);
@@ -633,3 +649,5 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
 TetrisCanvas.displayName = 'TetrisCanvas';
 
 export default TetrisCanvas;
+
+    
