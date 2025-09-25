@@ -45,13 +45,6 @@ export default function Home() {
       }
     }
   }, [user, loading]);
-
-  const showSaveWarning = () => {
-    toast({
-      title: "Block placed!",
-      description: "Please wait 5 seconds for it to be saved. Do not disconnect.",
-    });
-  };
   
   const updateInventory = async (newInventory: UserInventory) => {
     if (!user) return;
@@ -102,10 +95,10 @@ export default function Home() {
 
   const isPlacementInValidZone = (x: number, team: Team) => {
     const targetZone = getTeamZone(x);
-    if (team === 'blue' && targetZone === 'red') {
+    if (targetZone === 'blue' && team !== 'blue') {
       return false;
     }
-    if (team === 'red' && targetZone === 'blue') {
+    if (targetZone === 'red' && team !== 'red') {
       return false;
     }
     return true;
@@ -149,7 +142,7 @@ export default function Home() {
 
     if (useBlockFromInventory(blockId)) {
         tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
-        showSaveWarning();
+        tetrisCanvasApiRef.current.saveCurrentState();
     } else {
       toast({
         title: "Out of Blocks",
@@ -164,7 +157,7 @@ export default function Home() {
 
     if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current?.spawnBlockForTeam(blockId, team);
-      showSaveWarning();
+      tetrisCanvasApiRef.current?.saveCurrentState();
     } else {
        toast({
         title: "Out of Blocks",
@@ -193,7 +186,7 @@ export default function Home() {
 
     if (useBlockFromInventory(blockId)) {
       tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
-      showSaveWarning();
+      tetrisCanvasApiRef.current.saveCurrentState();
     } else {
       toast({
         title: "Out of Blocks",

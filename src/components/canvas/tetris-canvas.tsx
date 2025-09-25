@@ -18,6 +18,7 @@ export interface TetrisCanvasApi {
   getBodiesInRegion: (bounds: Matter.Bounds) => Matter.Body[];
   getZones: () => { blueZone: Matter.Bounds, redZone: Matter.Bounds, noMansLand: Matter.Bounds };
   canvasElement: HTMLCanvasElement | null;
+  saveCurrentState: () => void;
 }
 
 const BLOCK_WEIGHT = 40;
@@ -184,6 +185,32 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
     }
   };
 
+  const saveCurrentState = () => {
+    if (engineRef.current) {
+        const bodies = Composite.allBodies(engineRef.current.world)
+            .filter(body => !body.isStatic)
+            .map(body => ({
+                id: body.id,
+                label: body.label,
+                position: body.position,
+                angle: body.angle,
+                vertices: body.vertices.map(v => ({ x: v.x, y: v.y })),
+                velocity: body.velocity,
+                angularVelocity: body.angularVelocity,
+                isStatic: body.isStatic,
+                parts: [], // Simplified for this example
+                restitution: body.restitution,
+                friction: body.friction,
+                render: {
+                    fillStyle: body.render.fillStyle,
+                    strokeStyle: body.render.strokeStyle,
+                    lineWidth: body.render.lineWidth,
+                }
+            }));
+        saveCanvasState({ bodies });
+    }
+  };
+
   useImperativeHandle(ref, () => {
     const api: TetrisCanvasApi = {
       addBlock,
@@ -222,6 +249,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
         noMansLand: noMansLandBounds,
       }),
       canvasElement: renderRef.current?.canvas ?? null,
+      saveCurrentState,
     };
     apiRef.current = api;
     return api;
@@ -328,32 +356,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
     }
     
     // Save state periodically
-    const saveInterval = setInterval(() => {
-      if (engineRef.current) {
-          const bodies = Composite.allBodies(engineRef.current.world)
-              .filter(body => !body.isStatic)
-              .map(body => ({
-                  id: body.id,
-                  label: body.label,
-                  position: body.position,
-                  angle: body.angle,
-                  vertices: body.vertices.map(v => ({ x: v.x, y: v.y })),
-                  velocity: body.velocity,
-                  angularVelocity: body.angularVelocity,
-                  isStatic: body.isStatic,
-                  parts: [], // Simplified for this example
-                  restitution: body.restitution,
-                  friction: body.friction,
-                  render: {
-                      fillStyle: body.render.fillStyle,
-                      strokeStyle: body.render.strokeStyle,
-                      lineWidth: body.render.lineWidth,
-                  }
-              }));
-
-          saveCanvasState({ bodies });
-      }
-    }, 5000); // Save every 5 seconds
+    const saveInterval = setInterval(saveCurrentState, 5000); // Save every 5 seconds
 
 
     const mouse = Mouse.create(render.canvas);
