@@ -3,7 +3,9 @@
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import Matter, { IEventCollision, type Body, Bounds, Vector, Composite } from 'matter-js';
 import { getBlockById, type Team, type BlockId } from '@/lib/blocks';
-import { loadCanvasState, saveCanvasState } from '@/services/canvas-service';
+import { onSnapshot, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { saveCanvasState } from '@/services/canvas-service';
 
 export interface TetrisCanvasApi {
   addBlock: (blockId: string, x: number, y: number, team: Team) => void;
@@ -275,13 +277,31 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     const redZoneBody = Bodies.rectangle(redZoneBounds.min.x + (redZoneBounds.max.x - redZoneBounds.min.x) / 2, CANVAS_SIZE.height / 2, CANVAS_SIZE.width * 0.2, CANVAS_SIZE.height, { ...zoneRenderProps, render: { fillStyle: 'rgba(255, 0, 0, 0.1)' } });
     World.add(world, [blueZoneBody, redZoneBody]);
     
-    // Load canvas state from server
-    loadCanvasState().then(state => {
-        if (state && engineRef.current) {
+    // Real-time listener for canvas state
+    const canvasDocRef = doc(db, 'canvasState', 'singleton');
+    const unsubscribe = onSnapshot(canvasDocRef, (docSnap) => {
+        if (!docSnap.exists() || !engineRef.current) return;
+
+        // Do not update if a user is currently dragging a block
+        if (mouseConstraintRef.current?.body) {
+            return;
+        }
+
+        const state = docSnap.data()?.state as SerializedCanvasState;
+        if (state) {
+            // Remove all non-static bodies
+            Composite.allBodies(engineRef.current.world).forEach(body => {
+                if (!body.isStatic) {
+                    World.remove(engineRef.current!.world, body);
+                }
+            });
+
+            // Add bodies from the new state
             const bodies = state.bodies.map(sBody => deserializeBody(sBody, team));
             World.add(engineRef.current.world, bodies);
         }
     });
+
     
     // Save state periodically
     const saveInterval = setInterval(() => {
@@ -410,6 +430,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ team }, r
     window.addEventListener('resize', handleResize);
 
     return () => {
+      unsubscribe(); // Stop listening to real-time updates
       clearInterval(saveInterval);
       window.removeEventListener('resize', handleResize);
       Render.stop(render);
