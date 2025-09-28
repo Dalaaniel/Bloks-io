@@ -7,13 +7,26 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { updateUserInventory, type UserInventory } from '@/services/auth-service';
-import { useMemo } from 'react';
+import { updateUserInventory, getUserInventory, type UserInventory } from '@/services/auth-service';
+import { useMemo, useState, useEffect } from 'react';
 
 export default function StorePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const [inventory, setInventory] = useState<UserInventory>({});
+
+  useEffect(() => {
+      if(user) {
+          const fetchInventory = async () => {
+              const inv = await getUserInventory(user.uid);
+              if (inv) {
+                  setInventory(inv);
+              }
+          }
+          fetchInventory();
+      }
+  }, [user]);
 
   const storeBlocks = useMemo(() => {
     if (!user) {
@@ -33,14 +46,14 @@ export default function StorePage() {
       return;
     }
 
-    const currentInventory = user.inventory || {};
     const newInventory: UserInventory = {
-      ...currentInventory,
-      [blockId as BlockId]: (currentInventory[blockId as BlockId] || 0) + 1,
+      ...inventory,
+      [blockId as BlockId]: (inventory[blockId as BlockId] || 0) + 1,
     };
 
     try {
       await updateUserInventory(user.uid, newInventory);
+      setInventory(newInventory); // Optimistic update
       toast({
         title: "Purchase Successful!",
         description: `A new block has been added to your inventory.`,

@@ -6,11 +6,11 @@ import {
   signInWithEmailAndPassword,
   type UserCredential
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { type Team, type BlockId } from '@/lib/blocks';
 
-export type UserInventory = { [key in BlockId]: number };
+export type UserInventory = { [key in BlockId]?: number };
 
 export interface UserProfile {
   uid: string;
@@ -54,6 +54,23 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     console.warn(`No user profile found for UID: ${uid}`);
     return null;
   }
+}
+
+export async function getUserInventory(uid: string): Promise<UserInventory | null> {
+    const profile = await getUserProfile(uid);
+    return profile?.inventory || null;
+}
+
+export function listenToUserInventory(uid: string, callback: (inventory: UserInventory | null) => void): () => void {
+    const userDocRef = doc(db, 'users', uid);
+    return onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+            const data = doc.data() as UserProfile;
+            callback(data.inventory || null);
+        } else {
+            callback(null);
+        }
+    });
 }
 
 export async function updateUserInventory(uid: string, newInventory: UserInventory): Promise<void> {

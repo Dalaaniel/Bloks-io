@@ -107,7 +107,8 @@ export default function Home() {
 
   const updateInventory = async (newInventory: UserInventory) => {
     if (!user) return;
-    setOwnedBlocks(newInventory);
+    // The listener will update the state, but we can optimistically update here
+    setOwnedBlocks(newInventory); 
     try {
       await updateUserInventory(user.uid, newInventory);
     } catch (error) {
@@ -126,7 +127,7 @@ export default function Home() {
         ...ownedBlocks,
         [blockId]: ownedBlocks[blockId as BlockId] - 1,
       };
-      updateInventory(newInventory);
+      updateInventory(newInventory); // This will now only cause a local state update initially
       return true;
     }
     return false;
@@ -210,7 +211,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
-
-    

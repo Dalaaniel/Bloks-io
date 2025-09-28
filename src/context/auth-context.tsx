@@ -3,13 +3,12 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { type UserProfile } from '@/services/auth-service';
+import { auth } from '@/lib/firebase';
+import { getUserProfile, type UserProfile, type UserInventory } from '@/services/auth-service';
 import { useRouter } from 'next/navigation';
 import { addPlayer, removePlayer } from '@/services/game-state-service';
 
-export interface User extends FirebaseUser, UserProfile {}
+export interface User extends FirebaseUser, Omit<UserProfile, 'inventory'> {}
 
 interface AuthContextType {
   user: User | null;
@@ -25,14 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    let unsubscribeProfile: (() => void) | null = null;
-    
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-        unsubscribeProfile = null;
-      }
-      
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const unsubscribeProfile = onSnapshot(userDocRef, async (doc) => {
@@ -52,8 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           removePlayer(user);
         }
         setUser(null);
-        setLoading(false);
       }
+      setLoading(false);
     });
 
     return () => unsubscribeAuth();
