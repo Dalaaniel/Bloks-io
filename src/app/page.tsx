@@ -5,7 +5,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Inventory from '@/components/canvas/inventory';
-import TetrisCanvas, { type TetrisCanvasApi, type SerializedCanvasState } from '@/components/canvas/tetris-canvas';
+import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-canvas';
 import TurnIndicator from '@/components/canvas/turn-indicator';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -65,7 +65,20 @@ export default function Home() {
     return () => unsubscribeGameState();
   }, [gameState?.turnNumber]);
   
-  // Timer logic
+  // --- Core Actions ---
+  const saveAndEndTurn = async () => {
+    if (!tetrisCanvasApiRef.current || !user) return;
+    // Check if it's my turn before saving and passing
+    if (gameState?.turnOrder[gameState.currentUserTurnIndex] !== user.uid) return;
+
+    const state = tetrisCanvasApiRef.current.serializeCanvas();
+    if (state) {
+      await saveCanvasState(state);
+      await passTurn(user.uid);
+    }
+  };
+
+  // Timer logic & auto end turn
   useEffect(() => {
     if (gameState && gameState.turnEndsAt && !isFreePlay) {
       const interval = setInterval(() => {
@@ -73,21 +86,16 @@ export default function Home() {
         const endsAt = (gameState.turnEndsAt as any).toMillis();
         const remaining = Math.max(0, Math.ceil((endsAt - now) / 1000));
         setTimeRemaining(remaining);
+        
+        const isMyTurnForEffect = user && gameState?.turnOrder[gameState.currentUserTurnIndex] === user.uid;
+        if (remaining <= 0 && isMyTurnForEffect) {
+          saveAndEndTurn();
+        }
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [gameState, isFreePlay]);
-  
-  // --- Core Actions ---
+  }, [gameState, isFreePlay, user]);
 
-  const saveAndEndTurn = async () => {
-    if (!isMyTurn || !tetrisCanvasApiRef.current || !user) return;
-    const state = tetrisCanvasApiRef.current.serializeCanvas();
-    if (state) {
-      await saveCanvasState(state);
-      await passTurn(user.uid);
-    }
-  };
 
   const saveCurrentState = () => {
     if (!tetrisCanvasApiRef.current) return;
@@ -193,11 +201,6 @@ export default function Home() {
           >
             <CornerUpLeft className="h-4 w-4" />
           </Button>
-           {isMyTurn && !isFreePlay && (
-              <Button onClick={saveAndEndTurn}>
-                  End Turn
-              </Button>
-          )}
         </div>
          <TurnIndicator gameState={gameState} timeRemaining={timeRemaining} currentUser={user} />
         <div className="absolute bottom-4 right-4 bg-black/50 text-white p-2 rounded-md text-xs pointer-events-none">
