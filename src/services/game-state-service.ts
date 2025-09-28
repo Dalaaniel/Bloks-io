@@ -21,11 +21,11 @@ async function managePlayer(user: User, action: 'add' | 'remove') {
   try {
     await runTransaction(db, async (transaction) => {
       const gameStateDoc = await transaction.get(gameStateDocRef);
-      let newState: Partial<GameState>;
-
+      
+      // Case 1: No game state exists yet. Create it for the first player.
       if (!gameStateDoc.exists()) {
         if (action === 'add') {
-          newState = {
+          const newState: GameState = {
             playerCount: 1,
             turnOrder: [user.uid],
             playerDetails: { [user.uid]: { email: user.email, team: user.team } },
@@ -35,41 +35,47 @@ async function managePlayer(user: User, action: 'add' | 'remove') {
           };
           transaction.set(gameStateDocRef, newState);
         }
-        return;
+        return; // Nothing to do if removing from a non-existent game
       }
 
+      // Case 2: Game state exists. Add or remove a player.
       const oldState = gameStateDoc.data() as GameState;
-      const playerExists = oldState.turnOrder.includes(user.uid);
-      
       let newTurnOrder = [...oldState.turnOrder];
       let newPlayerDetails = { ...oldState.playerDetails };
-      let newPlayerCount = oldState.playerCount;
-      let newTurnIndex = oldState.currentUserTurnIndex;
-
+      
+      const playerExists = newTurnOrder.includes(user.uid);
+      
       if (action === 'add' && !playerExists) {
         newTurnOrder.push(user.uid);
         newPlayerDetails[user.uid] = { email: user.email, team: user.team };
-        newPlayerCount++;
       } else if (action === 'remove' && playerExists) {
-        const playerIndex = newTurnOrder.indexOf(user.uid);
-        newTurnOrder.splice(playerIndex, 1);
+        newTurnOrder = newTurnOrder.filter(uid => uid !== user.uid);
         delete newPlayerDetails[user.uid];
-        newPlayerCount = newTurnOrder.length;
+      }
 
-        // If the player whose turn it was left, advance the turn
-        if (playerIndex === oldState.currentUserTurnIndex) {
-            newTurnIndex = playerIndex % newTurnOrder.length;
-            if (newTurnOrder.length === 0) newTurnIndex = 0;
-            transaction.update(gameStateDocRef, { 
-                turnEndsAt: Timestamp.fromMillis(Date.now() + TURN_DURATION_MS),
-                turnNumber: oldState.turnNumber + 1,
-             });
-        } else if (playerIndex < oldState.currentUserTurnIndex) {
-            // Adjust index if a player before the current one leaves
-            newTurnIndex--;
+      const newPlayerCount = newTurnOrder.length;
+      let newTurnIndex = oldState.currentUserTurnIndex;
+
+      // If the player being removed was the current turn player, advance the turn.
+      if (action === 'remove' && playerExists) {
+        const removedPlayerIndex = oldState.turnOrder.indexOf(user.uid);
+        if (removedPlayerIndex === oldState.currentUserTurnIndex) {
+          // Turn advances, so reset the timer
+          transaction.update(gameStateDocRef, {
+            turnEndsAt: Timestamp.fromMillis(Date.now() + TURN_DURATION_MS),
+            turnNumber: oldState.turnNumber + 1,
+          });
+          // The new index will be calculated below based on the new turn order.
         }
       }
       
+      // Recalculate the current turn index safely.
+      if (newPlayerCount > 0) {
+        newTurnIndex = oldState.currentUserTurnIndex % newPlayerCount;
+      } else {
+        newTurnIndex = 0; // If no players, reset to 0
+      }
+
       transaction.update(gameStateDocRef, {
         playerCount: newPlayerCount,
         turnOrder: newTurnOrder,
@@ -114,5 +120,3 @@ export async function passTurn(currentUserId: string) {
     console.error("Error passing turn: ", error);
   }
 }
-
-    
