@@ -22,8 +22,8 @@ async function managePlayer(user: User, action: 'add' | 'remove') {
     await runTransaction(db, async (transaction) => {
       const gameStateDoc = await transaction.get(gameStateDocRef);
       
-      // Case 1: No game state exists yet. Create it for the first player.
       if (!gameStateDoc.exists()) {
+        // First player ever. Create the game state.
         if (action === 'add') {
           const newState: GameState = {
             playerCount: 1,
@@ -35,16 +35,17 @@ async function managePlayer(user: User, action: 'add' | 'remove') {
           };
           transaction.set(gameStateDocRef, newState);
         }
-        return; // Nothing to do if removing from a non-existent game
+        return; 
       }
 
-      // Case 2: Game state exists. Add or remove a player.
+      // Game state exists, modify it.
       const oldState = gameStateDoc.data() as GameState;
       let newTurnOrder = [...oldState.turnOrder];
       let newPlayerDetails = { ...oldState.playerDetails };
       
       const playerExists = newTurnOrder.includes(user.uid);
-      
+      const removingCurrentPlayer = playerExists && oldState.turnOrder[oldState.currentUserTurnIndex] === user.uid;
+
       if (action === 'add' && !playerExists) {
         newTurnOrder.push(user.uid);
         newPlayerDetails[user.uid] = { email: user.email, team: user.team };
@@ -55,33 +56,40 @@ async function managePlayer(user: User, action: 'add' | 'remove') {
 
       const newPlayerCount = newTurnOrder.length;
       let newTurnIndex = oldState.currentUserTurnIndex;
+      let newTurnNumber = oldState.turnNumber;
+      let newTurnEndsAt = oldState.turnEndsAt;
 
-      // If the player being removed was the current turn player, advance the turn.
-      if (action === 'remove' && playerExists) {
-        const removedPlayerIndex = oldState.turnOrder.indexOf(user.uid);
-        if (removedPlayerIndex === oldState.currentUserTurnIndex) {
-          // Turn advances, so reset the timer
-          transaction.update(gameStateDocRef, {
-            turnEndsAt: Timestamp.fromMillis(Date.now() + TURN_DURATION_MS),
-            turnNumber: oldState.turnNumber + 1,
-          });
-          // The new index will be calculated below based on the new turn order.
-        }
+      if (newPlayerCount === 0) {
+        // Last player left, reset the game state but keep the doc.
+        const resetState: GameState = {
+            playerCount: 0,
+            turnOrder: [],
+            playerDetails: {},
+            currentUserTurnIndex: 0,
+            turnEndsAt: Timestamp.now(),
+            turnNumber: 0,
+        };
+        transaction.set(gameStateDocRef, resetState);
+        return;
       }
       
-      // Recalculate the current turn index safely.
-      if (newPlayerCount > 0) {
+      // If the current player was removed, or if the index is now out of bounds.
+      if (removingCurrentPlayer || newTurnIndex >= newPlayerCount) {
         newTurnIndex = oldState.currentUserTurnIndex % newPlayerCount;
-      } else {
-        newTurnIndex = 0; // If no players, reset to 0
+        newTurnNumber = oldState.turnNumber + 1;
+        newTurnEndsAt = Timestamp.fromMillis(Date.now() + TURN_DURATION_MS);
       }
 
-      transaction.update(gameStateDocRef, {
+      const finalState = {
         playerCount: newPlayerCount,
         turnOrder: newTurnOrder,
         playerDetails: newPlayerDetails,
         currentUserTurnIndex: newTurnIndex,
-      });
+        turnNumber: newTurnNumber,
+        turnEndsAt: newTurnEndsAt,
+      };
+
+      transaction.update(gameStateDocRef, finalState);
     });
   } catch (error) {
     console.error(`Error ${action}ing player:`, error);
