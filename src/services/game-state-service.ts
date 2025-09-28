@@ -54,7 +54,7 @@ async function managePlayer(user: User, action: 'add' | 'remove') {
         const playerIndex = newTurnOrder.indexOf(user.uid);
         newTurnOrder.splice(playerIndex, 1);
         delete newPlayerDetails[user.uid];
-        newPlayerCount--;
+        newPlayerCount = newTurnOrder.length;
 
         // If the player whose turn it was left, advance the turn
         if (playerIndex === oldState.currentUserTurnIndex) {
@@ -63,7 +63,6 @@ async function managePlayer(user: User, action: 'add' | 'remove') {
             transaction.update(gameStateDocRef, { 
                 turnEndsAt: Timestamp.fromMillis(Date.now() + TURN_DURATION_MS),
                 turnNumber: oldState.turnNumber + 1,
-                currentUserTurnIndex: newTurnIndex,
              });
         } else if (playerIndex < oldState.currentUserTurnIndex) {
             // Adjust index if a player before the current one leaves
