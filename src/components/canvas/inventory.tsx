@@ -15,26 +15,19 @@ interface InventoryProps {
   ownedBlocks: UserInventory;
   team: Team;
   onBlockClick: (blockId: string) => void;
-  isMyTurn: boolean;
 }
 
-export default function Inventory({ ownedBlocks, team, onBlockClick, isMyTurn }: InventoryProps) {
+export default function Inventory({ ownedBlocks, team, onBlockClick }: InventoryProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>, blockId: string) => {
-    if (!isMyTurn) {
-      event.preventDefault();
-      return;
-    }
     event.dataTransfer.setData("application/tetris-block", blockId);
     event.dataTransfer.effectAllowed = "move";
   };
 
   const handleItemClick = (blockId: string) => {
-    if(isMyTurn) {
-      onBlockClick(blockId);
-    }
+    onBlockClick(blockId);
   }
 
   const availableBlocks = Object.entries(ownedBlocks)
@@ -76,10 +69,10 @@ export default function Inventory({ ownedBlocks, team, onBlockClick, isMyTurn }:
       block && (
         <div
           key={block.id}
-          draggable={isMyTurn}
+          draggable={true}
           onDragStart={(e) => handleDragStart(e, block.id)}
           onClick={() => handleItemClick(block.id)}
-          className={`p-2 rounded-lg ${isMyTurn ? 'cursor-grab hover:bg-accent' : 'cursor-not-allowed opacity-50'} transition-colors flex flex-col items-center`}
+          className={`p-2 rounded-lg cursor-grab hover:bg-accent transition-colors flex flex-col items-center`}
         >
           <div className="w-16 h-16">
             <TetrisBlockComponent block={block} />
@@ -102,10 +95,8 @@ export default function Inventory({ ownedBlocks, team, onBlockClick, isMyTurn }:
       </ScrollArea>
       <Separator />
       <div className="p-4 text-xs text-muted-foreground">
-        { !user ? 'Log in to play.' : isMyTurn ? 'Your turn! Click or drag blocks.' : "Wait for your turn." }
+        { !user ? 'Log in to play.' : 'Click or drag blocks to the canvas.' }
       </div>
     </aside>
   );
 }
-
-    

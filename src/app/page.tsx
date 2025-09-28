@@ -10,12 +10,11 @@ import TurnIndicator from '@/components/canvas/turn-indicator';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { CornerUpLeft } from 'lucide-react';
-import { type Body } from 'matter-js';
-import { type Team, type BlockId } from '@/lib/blocks';
+import { type BlockId } from '@/lib/blocks';
 import { useAuth } from '@/context/auth-context';
 import { updateUserInventory, type UserInventory } from '@/services/auth-service';
-import { saveCanvasState } from '@/services/canvas-service';
-import { type GameState } from '@/services/game-state-service';
+import { saveCanvasState, loadCanvasState } from '@/services/canvas-service';
+import { passTurn, type GameState } from '@/services/game-state-service';
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -41,32 +40,30 @@ export default function Home() {
     }
   }, [user, loading]);
   
-  // Listen to Game and Canvas State
+  // Listen to Game State and pull Canvas State at turn start
   useEffect(() => {
     const gameStateDocRef = doc(db, 'gameState', 'singleton');
-    const unsubscribeGameState = onSnapshot(gameStateDocRef, (doc) => {
+    const unsubscribeGameState = onSnapshot(gameStateDocRef, async (doc) => {
       if (doc.exists()) {
-        setGameState(doc.data() as GameState);
-      }
-    });
+        const newGameState = doc.data() as GameState;
+        const oldTurnNumber = gameState?.turnNumber;
+        
+        setGameState(newGameState);
 
-    const canvasStateDocRef = doc(db, 'canvasState', 'singleton');
-    const unsubscribeCanvasState = onSnapshot(canvasStateDocRef, (doc) => {
-      if (doc.exists() && tetrisCanvasApiRef.current) {
-        // In multiplayer, only load if it's not your turn to avoid overwrites
-        // In freeplay, this condition is false, so we don't load, preventing disappearing blocks
-        if (!isMyTurn && !isFreePlay) {
-          const state = doc.data()?.state as SerializedCanvasState;
-          tetrisCanvasApiRef.current.loadCanvasState(state);
+        // If it's the start of a new turn, pull the latest canvas state
+        if (newGameState.turnNumber !== oldTurnNumber && tetrisCanvasApiRef.current) {
+          const state = await loadCanvasState();
+          if (state) {
+            tetrisCanvasApiRef.current.loadCanvasState(state);
+          }
         }
+      } else {
+        setGameState(null);
       }
     });
 
-    return () => {
-      unsubscribeGameState();
-      unsubscribeCanvasState();
-    };
-  }, [isMyTurn, isFreePlay]);
+    return () => unsubscribeGameState();
+  }, [gameState?.turnNumber]);
   
   // Timer logic
   useEffect(() => {
@@ -83,9 +80,13 @@ export default function Home() {
   
   // --- Core Actions ---
 
-  const saveAndEndTurn = () => {
-    if (!isMyTurn || !tetrisCanvasApiRef.current) return;
-    tetrisCanvasApiRef.current.saveAndEndTurn();
+  const saveAndEndTurn = async () => {
+    if (!isMyTurn || !tetrisCanvasApiRef.current || !user) return;
+    const state = tetrisCanvasApiRef.current.serializeCanvas();
+    if (state) {
+      await saveCanvasState(state);
+      await passTurn(user.uid);
+    }
   };
 
   const saveCurrentState = () => {
@@ -125,7 +126,7 @@ export default function Home() {
   
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    if (!tetrisCanvasApiRef.current || (!isMyTurn && !isFreePlay)) return;
+    if (!tetrisCanvasApiRef.current || !user) return;
     
     const blockId = event.dataTransfer.getData("application/tetris-block");
     if (!blockId) return;
@@ -148,7 +149,7 @@ export default function Home() {
   };
 
   const handleSpawnBlock = (blockId: string) => {
-    if (!tetrisCanvasApiRef.current || (!isMyTurn && !isFreePlay)) return;
+    if (!tetrisCanvasApiRef.current || !user) return;
 
     if (!useBlockFromInventory(blockId)) {
         toast({ title: "Out of Blocks", variant: "destructive" });
@@ -175,7 +176,6 @@ export default function Home() {
         ownedBlocks={ownedBlocks}
         team={user?.team || 'blue'}
         onBlockClick={handleSpawnBlock}
-        isMyTurn={isMyTurn || isFreePlay}
       />
 
       <div 
@@ -207,5 +207,3 @@ export default function Home() {
     </div>
   );
 }
-
-    

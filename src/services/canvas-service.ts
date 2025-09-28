@@ -1,5 +1,5 @@
 
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { type SerializedCanvasState } from '@/components/canvas/tetris-canvas';
 
@@ -32,5 +32,3 @@ export async function loadCanvasState(): Promise<SerializedCanvasState | null> {
         return null;
     }
 }
-
-    
