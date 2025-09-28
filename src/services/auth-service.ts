@@ -24,11 +24,9 @@ const defaultInventory: UserInventory = {
   i: 5, o: 5, t: 5, l: 5, j: 5, s: 5, z: 5
 };
 
-export async function signUp(email: string, password: string): Promise<UserCredential> {
+export async function signUp(email: string, password: string, team: Team): Promise<UserCredential> {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   const { user } = userCredential;
-
-  const team: Team = Math.random() > 0.5 ? 'red' : 'blue';
 
   const userProfile: UserProfile = {
     uid: user.uid,

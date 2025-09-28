@@ -25,7 +25,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    let unsubscribeProfile: (() => void) | null = null;
+    
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+      
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const unsubscribeProfile = onSnapshot(userDocRef, async (doc) => {
@@ -58,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await removePlayer(user);
       }
       await auth.signOut();
-      setUser(null);
+      // The onAuthStateChanged listener will handle player removal and state updates
       router.push('/login');
     } catch (error) {
       console.error('Error signing out:', error);

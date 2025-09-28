@@ -40,9 +40,10 @@ type DragMode = 'none' | 'panning' | 'zooming';
 interface TetrisCanvasProps {
   user: User | null;
   team: Team;
+  onInteractionEnd: () => void;
 }
 
-const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, team }, ref) => {
+const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, team, onInteractionEnd }, ref) => {
   const sceneRef = useRef<HTMLDivElement>(null);
   const starsCanvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine>();
@@ -240,6 +241,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      Events.off(mouseConstraint, 'mouseup', onInteractionEnd);
       Render.stop(render);
       Runner.stop(runner);
       World.clear(world, false);
@@ -302,6 +304,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
 
   const handleMouseUp = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (dragModeRef.current === 'none' && mouseConstraintRef.current?.body) {
+        onInteractionEnd();
+    }
     dragModeRef.current = 'none';
   };
 
