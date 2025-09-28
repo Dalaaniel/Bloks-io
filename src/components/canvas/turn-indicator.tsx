@@ -25,6 +25,11 @@ export default function TurnIndicator({ gameState, timeRemaining, currentUser }:
 
   const { turnOrder, currentUserTurnIndex } = gameState;
   const currentTurnPlayerId = turnOrder[currentUserTurnIndex];
+
+  if (!currentTurnPlayerId) {
+    return null;
+  }
+
   const isMyTurn = currentUser.uid === currentTurnPlayerId;
   const turnPlayerEmail = gameState.playerDetails[currentTurnPlayerId]?.email || 'A player';
 
@@ -45,5 +50,3 @@ export default function TurnIndicator({ gameState, timeRemaining, currentUser }:
     </div>
   );
 }
-
-    
