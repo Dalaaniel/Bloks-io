@@ -2,8 +2,11 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from 'react';
+import { onSnapshot, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import Inventory from '@/components/canvas/inventory';
-import TetrisCanvas, { type TetrisCanvasApi } from '@/components/canvas/tetris-canvas';
+import TetrisCanvas, { type TetrisCanvasApi, type SerializedCanvasState } from '@/components/canvas/tetris-canvas';
+import TurnIndicator from '@/components/canvas/turn-indicator';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { CornerUpLeft } from 'lucide-react';
@@ -11,41 +14,88 @@ import { type Body } from 'matter-js';
 import { type Team, type BlockId } from '@/lib/blocks';
 import { useAuth } from '@/context/auth-context';
 import { updateUserInventory, type UserInventory } from '@/services/auth-service';
-
-const CANVAS_WIDTH = 100000;
-type Zone = 'blue' | 'red' | 'no-mans-land';
-
-const getTeamZone = (x: number): Zone => {
-  const blueZoneWidth = CANVAS_WIDTH * 0.2;
-  const noMansLandWidth = CANVAS_WIDTH * 0.6;
-  
-  if (x < blueZoneWidth) {
-    return 'blue';
-  } else if (x < blueZoneWidth + noMansLandWidth) {
-    return 'no-mans-land';
-  } else {
-    return 'red';
-  }
-};
+import { saveCanvasState } from '@/services/canvas-service';
+import { type GameState } from '@/services/game-state-service';
 
 export default function Home() {
   const { user, loading } = useAuth();
+  const { toast } = useToast();
+  const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
+  
+  // Game state
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState(0);
   const [ownedBlocks, setOwnedBlocks] = useState<UserInventory>({
     i: 0, o: 0, t: 0, l: 0, j: 0, s: 0, z: 0,
   });
-  const [team, setTeam] = useState<Team>('blue');
-  const { toast } = useToast();
-  const tetrisCanvasApiRef = useRef<TetrisCanvasApi>(null);
 
+  const isMyTurn = !loading && user && gameState?.turnOrder[gameState.currentUserTurnIndex] === user.uid;
+  const isFreePlay = gameState?.playerCount === 1;
+
+  // Sync user data
   useEffect(() => {
     if (!loading && user) {
-      setTeam(user.team);
       if (user.inventory) {
         setOwnedBlocks(user.inventory);
       }
     }
   }, [user, loading]);
   
+  // Listen to Game and Canvas State
+  useEffect(() => {
+    const gameStateDocRef = doc(db, 'gameState', 'singleton');
+    const unsubscribeGameState = onSnapshot(gameStateDocRef, (doc) => {
+      if (doc.exists()) {
+        setGameState(doc.data() as GameState);
+      }
+    });
+
+    const canvasStateDocRef = doc(db, 'canvasState', 'singleton');
+    const unsubscribeCanvasState = onSnapshot(canvasStateDocRef, (doc) => {
+      if (doc.exists() && tetrisCanvasApiRef.current) {
+        // In multiplayer, only load if it's not your turn to avoid overwrites
+        // In freeplay, this condition is false, so we don't load, preventing disappearing blocks
+        if (!isMyTurn && !isFreePlay) {
+          const state = doc.data()?.state as SerializedCanvasState;
+          tetrisCanvasApiRef.current.loadCanvasState(state);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribeGameState();
+      unsubscribeCanvasState();
+    };
+  }, [isMyTurn, isFreePlay]);
+  
+  // Timer logic
+  useEffect(() => {
+    if (gameState && gameState.turnEndsAt && !isFreePlay) {
+      const interval = setInterval(() => {
+        const now = Date.now();
+        const endsAt = (gameState.turnEndsAt as any).toMillis();
+        const remaining = Math.max(0, Math.ceil((endsAt - now) / 1000));
+        setTimeRemaining(remaining);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [gameState, isFreePlay]);
+  
+  // --- Core Actions ---
+
+  const saveAndEndTurn = () => {
+    if (!isMyTurn || !tetrisCanvasApiRef.current) return;
+    tetrisCanvasApiRef.current.saveAndEndTurn();
+  };
+
+  const saveCurrentState = () => {
+    if (!tetrisCanvasApiRef.current) return;
+    const state = tetrisCanvasApiRef.current.serializeCanvas();
+    if (state) {
+      saveCanvasState(state);
+    }
+  };
+
   const updateInventory = async (newInventory: UserInventory) => {
     if (!user) return;
     setOwnedBlocks(newInventory);
@@ -61,7 +111,7 @@ export default function Home() {
     }
   }
 
-  const useBlockFromInventory = (blockId: string) => {
+  const useBlockFromInventory = (blockId: string): boolean => {
     if (ownedBlocks[blockId as BlockId] && ownedBlocks[blockId as BlockId] > 0) {
       const newInventory = {
         ...ownedBlocks,
@@ -72,127 +122,42 @@ export default function Home() {
     }
     return false;
   };
-
-  const addBlockToInventory = (blockId: string) => {
-    const newInventory = {
-      ...ownedBlocks,
-      [blockId]: (ownedBlocks[blockId as BlockId] || 0) + 1,
-    };
-    updateInventory(newInventory);
-  };
-
-  const checkAuth = () => {
-    if (!user) {
-      toast({
-        title: "Not Logged In",
-        description: "You must be logged in to interact with the canvas.",
-        variant: "destructive",
-      });
-      return false;
-    }
-    return true;
-  }
-
-  const isPlacementInValidZone = (x: number, team: Team) => {
-    const targetZone = getTeamZone(x);
-    if (targetZone === 'blue' && team !== 'blue') {
-      return false;
-    }
-    if (targetZone === 'red' && team !== 'red') {
-      return false;
-    }
-    return true;
-  }
-
+  
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    if (!checkAuth() || !tetrisCanvasApiRef.current) return;
+    if (!tetrisCanvasApiRef.current || (!isMyTurn && !isFreePlay)) return;
     
     const blockId = event.dataTransfer.getData("application/tetris-block");
     if (!blockId) return;
+
+    if (!useBlockFromInventory(blockId)) {
+        toast({ title: "Out of Blocks", variant: "destructive" });
+        return;
+    }
 
     const canvasRect = event.currentTarget.getBoundingClientRect();
     const xOnElement = event.clientX - canvasRect.left;
     const yOnElement = event.clientY - canvasRect.top;
     const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
 
-    if (!isPlacementInValidZone(worldCoords.x, team)) {
-      toast({ title: "Placement Invalid", description: "You cannot place blocks in an opponent's zone.", variant: "destructive" });
-      return;
-    }
+    tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, user!.team);
     
-    const checkSize = 80;
-    const checkBounds = {
-      min: { x: worldCoords.x - checkSize / 2, y: worldCoords.y - checkSize / 2 },
-      max: { x: worldCoords.x + checkSize / 2, y: worldCoords.y + checkSize / 2 }
-    };
-
-    const bodiesInArea = tetrisCanvasApiRef.current.getBodiesInRegion(checkBounds);
-    
-    const blocksInArea = bodiesInArea.filter((body: Body) => !body.isStatic);
-
-    if (blocksInArea.length > 0) {
-      toast({
-        title: "Placement Invalid",
-        description: "Too close to another block. Find an empty space.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (useBlockFromInventory(blockId)) {
-        tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
-        tetrisCanvasApiRef.current.saveCurrentState();
-    } else {
-      toast({
-        title: "Out of Blocks",
-        description: "You've run out of this block. Visit the store to buy more!",
-        variant: "destructive",
-      });
+    if (isFreePlay) {
+      saveCurrentState();
     }
   };
 
   const handleSpawnBlock = (blockId: string) => {
-    if (!checkAuth() || !tetrisCanvasApiRef.current) return;
+    if (!tetrisCanvasApiRef.current || (!isMyTurn && !isFreePlay)) return;
 
-    if (useBlockFromInventory(blockId)) {
-      tetrisCanvasApiRef.current?.spawnBlockForTeam(blockId, team);
-      tetrisCanvasApiRef.current?.saveCurrentState();
-    } else {
-       toast({
-        title: "Out of Blocks",
-        description: "You've run out of this block. Visit the store to buy more!",
-        variant: "destructive",
-      });
+    if (!useBlockFromInventory(blockId)) {
+        toast({ title: "Out of Blocks", variant: "destructive" });
+        return;
     }
-  };
+    tetrisCanvasApiRef.current.spawnBlockForTeam(blockId, user!.team);
 
-  const handleBlockTouchDrop = (blockId: string, clientX: number, clientY: number) => {
-    if (!checkAuth() || !tetrisCanvasApiRef.current) return;
-
-    const canvas = tetrisCanvasApiRef.current?.canvasElement;
-    if (!canvas) return;
-
-    const canvasRect = canvas.getBoundingClientRect();
-    const xOnElement = clientX - canvasRect.left;
-    const yOnElement = clientY - canvasRect.top;
-
-    const worldCoords = tetrisCanvasApiRef.current.getViewportCoordinates(xOnElement, yOnElement);
-
-    if (!isPlacementInValidZone(worldCoords.x, team)) {
-      toast({ title: "Placement Invalid", description: "You cannot place blocks in an opponent's zone.", variant: "destructive" });
-      return;
-    }
-
-    if (useBlockFromInventory(blockId)) {
-      tetrisCanvasApiRef.current.addBlock(blockId, worldCoords.x, worldCoords.y, team);
-      tetrisCanvasApiRef.current.saveCurrentState();
-    } else {
-      toast({
-        title: "Out of Blocks",
-        description: "You've run out of this block. Visit the store to buy more!",
-        variant: "destructive",
-      });
+    if (isFreePlay) {
+      saveCurrentState();
     }
   };
 
@@ -208,9 +173,9 @@ export default function Home() {
     <div className="flex" style={{ height: 'calc(100vh - 4rem)' }}>
       <Inventory 
         ownedBlocks={ownedBlocks}
-        team={team}
-        onBlockClick={handleSpawnBlock} 
-        onBlockTouchDrop={handleBlockTouchDrop} 
+        team={user?.team || 'blue'}
+        onBlockClick={handleSpawnBlock}
+        isMyTurn={isMyTurn || isFreePlay}
       />
 
       <div 
@@ -218,7 +183,7 @@ export default function Home() {
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
-        <TetrisCanvas ref={tetrisCanvasApiRef} user={user} team={team} />
+        <TetrisCanvas ref={tetrisCanvasApiRef} user={user} team={user?.team || 'blue'} />
         <div className="absolute top-4 left-4 z-10 flex gap-2">
           <Button 
             variant="outline" 
@@ -228,7 +193,13 @@ export default function Home() {
           >
             <CornerUpLeft className="h-4 w-4" />
           </Button>
+           {isMyTurn && !isFreePlay && (
+              <Button onClick={saveAndEndTurn}>
+                  End Turn
+              </Button>
+          )}
         </div>
+         <TurnIndicator gameState={gameState} timeRemaining={timeRemaining} currentUser={user} />
         <div className="absolute bottom-4 right-4 bg-black/50 text-white p-2 rounded-md text-xs pointer-events-none">
           Drag background to pan. Hold Ctrl and drag vertically to zoom.
         </div>
@@ -236,3 +207,5 @@ export default function Home() {
     </div>
   );
 }
+
+    

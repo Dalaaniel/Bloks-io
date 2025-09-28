@@ -5,8 +5,9 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { getUserProfile, type UserProfile } from '@/services/auth-service';
+import { type UserProfile } from '@/services/auth-service';
 import { useRouter } from 'next/navigation';
+import { addPlayer, removePlayer } from '@/services/game-state-service';
 
 export interface User extends FirebaseUser, UserProfile {}
 
@@ -26,41 +27,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // User is signed in, now listen for profile changes
         const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const unsubscribeProfile = onSnapshot(userDocRef, (doc) => {
+        const unsubscribeProfile = onSnapshot(userDocRef, async (doc) => {
           if (doc.exists()) {
             const userProfile = doc.data() as UserProfile;
-            setUser({ ...firebaseUser, ...userProfile });
+            const fullUser = { ...firebaseUser, ...userProfile };
+            setUser(fullUser);
+            await addPlayer(fullUser);
           } else {
-            // This case might happen if the user document is deleted, or right after signup
-            // and before the document is created.
-            console.warn(`No user profile found for UID: ${firebaseUser.uid}`);
             setUser(null);
           }
           setLoading(false);
-        }, (error) => {
-           console.error("Failed to fetch user profile:", error);
-           setUser(null);
-           setLoading(false);
         });
-
-        // Return a cleanup function for the profile listener
         return () => unsubscribeProfile();
-
       } else {
-        // User is signed out
+        if (user) {
+          removePlayer(user);
+        }
         setUser(null);
         setLoading(false);
       }
     });
 
-    // Return a cleanup function for the auth state listener
     return () => unsubscribeAuth();
-  }, []);
+  }, [user]);
 
   const signOut = async () => {
     try {
+      if(user) {
+        await removePlayer(user);
+      }
       await auth.signOut();
       setUser(null);
       router.push('/login');
@@ -85,3 +81,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+    

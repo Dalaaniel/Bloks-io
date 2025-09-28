@@ -1,8 +1,8 @@
 
 "use client";
 
-import React, { useState } from "react";
-import { getBlockById, type Team, type BlockId } from "@/lib/blocks";
+import React from "react";
+import { getBlockById, type Team } from "@/lib/blocks";
 import TetrisBlockComponent from "@/components/tetris-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -15,20 +15,15 @@ interface InventoryProps {
   ownedBlocks: UserInventory;
   team: Team;
   onBlockClick: (blockId: string) => void;
-  onBlockTouchDrop?: (blockId: string, x: number, y: number) => void;
+  isMyTurn: boolean;
 }
 
-export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouchDrop }: InventoryProps) {
+export default function Inventory({ ownedBlocks, team, onBlockClick, isMyTurn }: InventoryProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
-  const [touchPosition, setTouchPosition] = useState<{ x: number; y: number } | null>(null);
-
-  const draggingBlock = draggingBlockId ? getBlockById(draggingBlockId, team) : undefined;
-
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>, blockId: string) => {
-    if (!user) {
+    if (!isMyTurn) {
       event.preventDefault();
       return;
     }
@@ -36,34 +31,8 @@ export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouc
     event.dataTransfer.effectAllowed = "move";
   };
 
-  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>, blockId: string) => {
-    if (!user) {
-      event.preventDefault();
-      return;
-    }
-    event.preventDefault();
-    setDraggingBlockId(blockId);
-    const touch = event.touches[0];
-    setTouchPosition({ x: touch.clientX, y: touch.clientY });
-  };
-
-  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (!draggingBlockId) return;
-    const touch = event.touches[0];
-    setTouchPosition({ x: touch.clientX, y: touch.clientY });
-  };
-
-  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (!draggingBlockId || !touchPosition) return;
-    if (onBlockTouchDrop) {
-      onBlockTouchDrop(draggingBlockId, touchPosition.x, touchPosition.y);
-    }
-    setDraggingBlockId(null);
-    setTouchPosition(null);
-  };
-  
   const handleItemClick = (blockId: string) => {
-    if(user) {
+    if(isMyTurn) {
       onBlockClick(blockId);
     }
   }
@@ -107,13 +76,10 @@ export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouc
       block && (
         <div
           key={block.id}
-          draggable={!!user}
+          draggable={isMyTurn}
           onDragStart={(e) => handleDragStart(e, block.id)}
           onClick={() => handleItemClick(block.id)}
-          onTouchStart={(e) => handleTouchStart(e, block.id)}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          className="p-2 rounded-lg cursor-pointer hover:bg-accent transition-colors flex flex-col items-center"
+          className={`p-2 rounded-lg ${isMyTurn ? 'cursor-grab hover:bg-accent' : 'cursor-not-allowed opacity-50'} transition-colors flex flex-col items-center`}
         >
           <div className="w-16 h-16">
             <TetrisBlockComponent block={block} />
@@ -123,7 +89,6 @@ export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouc
       )
     ));
   }
-
 
   return (
     <aside className="w-48 border-r bg-secondary/50 flex flex-col relative">
@@ -137,28 +102,10 @@ export default function Inventory({ ownedBlocks, team, onBlockClick, onBlockTouc
       </ScrollArea>
       <Separator />
       <div className="p-4 text-xs text-muted-foreground">
-        { user ? 'Click or drag blocks onto the canvas.' : 'Log in to play.' }
+        { !user ? 'Log in to play.' : isMyTurn ? 'Your turn! Click or drag blocks.' : "Wait for your turn." }
       </div>
-
-      {draggingBlock && touchPosition && (
-        <div
-          style={{
-            position: "fixed",
-            pointerEvents: "none",
-            top: touchPosition.y - 40,
-            left: touchPosition.x - 40,
-            width: 80,
-            height: 80,
-            opacity: 0.7,
-            zIndex: 1000,
-          }}
-        >
-            <TetrisBlockComponent
-              block={draggingBlock}
-              className="w-full h-full"
-            />
-        </div>
-      )}
     </aside>
   );
 }
+
+    

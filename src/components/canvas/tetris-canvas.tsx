@@ -2,59 +2,40 @@
 "use client";
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import Matter, { IEventCollision, type Body, Bounds, Vector, Composite } from 'matter-js';
+import Matter, { type Body, Composite } from 'matter-js';
 import { getBlockById, type Team, type BlockId } from '@/lib/blocks';
-import { onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { passTurn } from '@/services/game-state-service';
 import { saveCanvasState } from '@/services/canvas-service';
 import { type User } from '@/context/auth-context';
-
-
-export interface TetrisCanvasApi {
-  addBlock: (blockId: string, x: number, y: number, team: Team) => void;
-  spawnBlockForTeam: (blockId: string, team: Team) => void;
-  getViewportCoordinates: (x: number, y: number) => { x: number, y: number };
-  resetView: () => void;
-  getBodiesInRegion: (bounds: Matter.Bounds) => Matter.Body[];
-  getZones: () => { blueZone: Matter.Bounds, redZone: Matter.Bounds, noMansLand: Matter.Bounds };
-  canvasElement: HTMLCanvasElement | null;
-  saveCurrentState: () => void;
-}
-
-const BLOCK_WEIGHT = 40;
-const SPAWN_Y_OFFSET = 29500;
-type DragMode = 'none' | 'panning' | 'zooming';
-
-const CANVAS_SIZE = { width: 100000, height: 30000 };
-
-interface CustomBody extends Body {
-  initialOverlapWhitelist?: Set<number>;
-}
 
 export interface SerializedBody {
   id: number;
   label: string;
   position: { x: number; y: number };
   angle: number;
-  vertices: { x: number, y: number }[];
   velocity: { x: number; y: number };
   angularVelocity: number;
-  isStatic: boolean;
-  parts: SerializedBody[];
-  restitution: number;
-  friction: number;
-  render: {
-    fillStyle?: string;
-    strokeStyle?: string;
-    lineWidth?: number;
-  };
-   initialOverlapWhitelist?: number[];
 }
 
 export interface SerializedCanvasState {
   bodies: SerializedBody[];
 }
 
+export interface TetrisCanvasApi {
+  addBlock: (blockId: string, x: number, y: number, team: Team) => void;
+  spawnBlockForTeam: (blockId: string, team: Team) => void;
+  getViewportCoordinates: (x: number, y: number) => { x: number, y: number };
+  resetView: () => void;
+  loadCanvasState: (state: SerializedCanvasState) => void;
+  serializeCanvas: () => SerializedCanvasState | null;
+  saveAndEndTurn: () => void;
+  canvasElement: HTMLCanvasElement | null;
+}
+
+const CANVAS_SIZE = { width: 100000, height: 30000 };
+const SPAWN_Y_OFFSET = 29500;
+type DragMode = 'none' | 'panning' | 'zooming';
 
 interface TetrisCanvasProps {
   user: User | null;
@@ -66,12 +47,9 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
   const starsCanvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine>();
   const renderRef = useRef<Matter.Render>();
-  const mouseRef = useRef<Matter.Mouse>();
   const mouseConstraintRef = useRef<Matter.MouseConstraint>();
-  const apiRef = useRef<TetrisCanvasApi | null>(null);
 
   const [zoom, setZoom] = useState(0.5);
-
   const dragModeRef = useRef<DragMode>('none');
   const lastMousePosition = useRef({ x: 0, y: 0 });
   const viewCenter = useRef({ x: CANVAS_SIZE.width / 2, y: CANVAS_SIZE.height - 1000 });
@@ -79,89 +57,120 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
   const lastTouchPosition = useRef({ x: 0, y: 0 });
   const pinchZoomStartRef = useRef<{ distance: number; zoom: number } | null>(null);
 
-  
-  const blueZoneWidth = CANVAS_SIZE.width * 0.2;
-  const noMansLandWidth = CANVAS_SIZE.width * 0.6;
-
-  const blueZoneBounds = {
-      min: { x: 0, y: 0 },
-      max: { x: blueZoneWidth, y: CANVAS_SIZE.height }
-  };
-  const noMansLandBounds = {
-      min: { x: blueZoneWidth, y: 0 },
-      max: { x: blueZoneWidth + noMansLandWidth, y: CANVAS_SIZE.height }
-  };
-  const redZoneBounds = {
-      min: { x: blueZoneWidth + noMansLandWidth, y: 0 },
-      max: { x: CANVAS_SIZE.width, y: CANVAS_SIZE.height }
-  };
-  const createBlockBody = (blockId: string, x: number, y: number, team: Team): CustomBody | null => {
+  const createBlockBody = (blockId: string, x: number, y: number, team: Team, id?: number): Body | null => {
       const blockData = getBlockById(blockId, team);
       if (!blockData) return null;
 
       const scale = 2;
-      const teamCategory = team === 'red' ? 0b0001 : 0b0010;
-
       const parts = blockData.parts.map(part => {
           const vertices = part.map(p => ({ x: p.x * scale, y: p.y * scale }));
           return Matter.Bodies.fromVertices(0, 0, [vertices], {
-               render: {
-                  fillStyle: blockData.color,
-                  strokeStyle: 'rgba(0,0,0,0.2)',
-                  lineWidth: 2,
-              }
+               render: { fillStyle: blockData.color }
           });
       });
       
       const compoundBody = Matter.Body.create({
-          mass: BLOCK_WEIGHT,
-          collisionFilter: {
-              category: teamCategory,
-              mask: 0b1111,
-          },
           parts: parts,
       });
 
       Matter.Body.setParts(compoundBody, parts);
       compoundBody.parts.forEach(part => {
           part.render.fillStyle = blockData.color;
-          part.render.strokeStyle = 'rgba(0,0,0,0.2)';
-          part.render.lineWidth = 2;
       });
-
 
       Matter.Body.setPosition(compoundBody, { x, y });
       compoundBody.label = `block-${team}-${blockId}`;
+      if (id) {
+        compoundBody.id = id;
+      }
       
-      return compoundBody as CustomBody;
+      return compoundBody;
   }
 
-  useEffect(() => {
-    const starsCanvas = starsCanvasRef.current;
-    if (!starsCanvas) return;
-    starsCanvas.width = CANVAS_SIZE.width;
-    starsCanvas.height = CANVAS_SIZE.height;
-    const ctx = starsCanvas.getContext('2d');
-    if (!ctx) return;
-    ctx.fillStyle = 'white';
-    for (let i = 0; i < 20000; i++) {
-      const x = Math.random() * CANVAS_SIZE.width;
-      const y = Math.random() * CANVAS_SIZE.height;
-      const radius = Math.random() * 1.5;
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }, []);
-
-  const addBlock = (blockId: string, x: number, y: number, team: Team) => {
-    const engine = engineRef.current;
-    if (!engine) return;
-    const blockBody = createBlockBody(blockId as BlockId, x, y, team);
-    if(blockBody) {
-      Matter.World.add(engine.world, [blockBody]);
-    }
+  const serializeCanvas = (): SerializedCanvasState | null => {
+    if (!engineRef.current) return null;
+    const bodies = Composite.allBodies(engineRef.current.world)
+        .filter(body => !body.isStatic)
+        .map(body => ({
+            id: body.id,
+            label: body.label,
+            position: body.position,
+            angle: body.angle,
+            velocity: body.velocity,
+            angularVelocity: body.angularVelocity,
+        }));
+    return { bodies };
   };
+
+  const loadCanvasState = (state: SerializedCanvasState) => {
+    const world = engineRef.current?.world;
+    if (!world) return;
+    
+    // Clear existing dynamic bodies
+    Composite.allBodies(world).forEach(body => {
+      if (!body.isStatic) {
+        Composite.remove(world, body);
+      }
+    });
+
+    // Add new bodies from state
+    state.bodies.forEach(sBody => {
+      const [_, bodyTeam, blockId] = sBody.label.split('-');
+      const newBody = createBlockBody(blockId, sBody.position.x, sBody.position.y, (bodyTeam as Team) || team, sBody.id);
+      if (newBody) {
+          Matter.Body.setAngle(newBody, sBody.angle);
+          Matter.Body.setVelocity(newBody, sBody.velocity);
+          Matter.Body.setAngularVelocity(newBody, sBody.angularVelocity);
+          Composite.add(world, newBody);
+      }
+    });
+  }
+
+  useImperativeHandle(ref, () => ({
+    addBlock: (blockId, x, y, team) => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      const blockBody = createBlockBody(blockId as BlockId, x, y, team);
+      if(blockBody) {
+        Matter.World.add(engine.world, [blockBody]);
+      }
+    },
+    spawnBlockForTeam: (blockId, team) => {
+        const xSpawn = team === 'blue'
+            ? CANVAS_SIZE.width * 0.1
+            : CANVAS_SIZE.width * 0.9;
+        const blockBody = createBlockBody(blockId as BlockId, xSpawn, SPAWN_Y_OFFSET, team);
+        if (blockBody && engineRef.current) {
+            Matter.World.add(engineRef.current.world, [blockBody]);
+        }
+    },
+    getViewportCoordinates: (x, y) => {
+      const render = renderRef.current;
+      if (!render || !render.options.width || !render.options.height) return { x: 0, y: 0 };
+      const view = render.bounds;
+      const worldX = view.min.x + (x / render.options.width) * (view.max.x - view.min.x);
+      const worldY = view.min.y + (y / render.options.height) * (view.max.y - view.min.y);
+      return { x: worldX, y: worldY };
+    },
+    resetView: () => {
+      const render = renderRef.current;
+      if (!render || !render.options.width || !render.options.height) return;
+      const viewportWidth = render.options.width / zoom;
+      const viewportHeight = render.options.height / zoom;
+      viewCenter.current = { x: viewportWidth / 2, y: viewportHeight / 2 };
+      updateCamera();
+    },
+    loadCanvasState,
+    serializeCanvas,
+    saveAndEndTurn: async () => {
+      const state = serializeCanvas();
+      if (state && user) {
+        await saveCanvasState(state);
+        await passTurn(user.uid);
+      }
+    },
+    canvasElement: renderRef.current?.canvas ?? null,
+  }));
 
   const updateCamera = () => {
     const render = renderRef.current;
@@ -185,106 +194,15 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
     }
   };
 
-  const saveCurrentState = () => {
-    if (engineRef.current) {
-        const bodies = Composite.allBodies(engineRef.current.world)
-            .filter(body => !body.isStatic)
-            .map(body => ({
-                id: body.id,
-                label: body.label,
-                position: body.position,
-                angle: body.angle,
-                vertices: body.vertices.map(v => ({ x: v.x, y: v.y })),
-                velocity: body.velocity,
-                angularVelocity: body.angularVelocity,
-                isStatic: body.isStatic,
-                parts: [], // Simplified for this example
-                restitution: body.restitution,
-                friction: body.friction,
-                render: {
-                    fillStyle: body.render.fillStyle,
-                    strokeStyle: body.render.strokeStyle,
-                    lineWidth: body.render.lineWidth,
-                }
-            }));
-        saveCanvasState({ bodies });
-    }
-  };
-
-  useImperativeHandle(ref, () => {
-    const api: TetrisCanvasApi = {
-      addBlock,
-      spawnBlockForTeam: (blockId, team) => {
-        const world = engineRef.current?.world;
-        if (!world) return;
-        const targetZone = team === 'blue' ? blueZoneBounds : redZoneBounds;
-        const xSpawn = targetZone.min.x + Math.random() * (targetZone.max.x - targetZone.min.x);
-        addBlock(blockId as BlockId, xSpawn, SPAWN_Y_OFFSET, team);
-      },
-      getViewportCoordinates: (x, y) => {
-        const render = renderRef.current;
-        if (!render || !render.options.width || !render.options.height) return { x: 0, y: 0 };
-        const view = render.bounds;
-        const worldX = view.min.x + (x / render.options.width) * (view.max.x - view.min.x);
-        const worldY = view.min.y + (y / render.options.height) * (view.max.y - view.min.y);
-        return { x: worldX, y: worldY };
-      },
-      resetView: () => {
-        const render = renderRef.current;
-        if (!render || !render.options.width || !render.options.height) return;
-        const viewportWidth = render.options.width / zoom;
-        const viewportHeight = render.options.height / zoom;
-        viewCenter.current = { x: viewportWidth / 2, y: viewportHeight / 2 };
-        updateCamera();
-      },
-      getBodiesInRegion: (bounds) => {
-        const engine = engineRef.current;
-        if (!engine) return [];
-        const allBodies = Matter.Composite.allBodies(engine.world);
-        return Matter.Query.region(allBodies, bounds);
-      },
-      getZones: () => ({
-        blueZone: blueZoneBounds,
-        redZone: redZoneBounds,
-        noMansLand: noMansLandBounds,
-      }),
-      canvasElement: renderRef.current?.canvas ?? null,
-      saveCurrentState,
-    };
-    apiRef.current = api;
-    return api;
-  }, [zoom, blueZoneBounds, redZoneBounds, noMansLandBounds]);
-
-  const deserializeBody = (sBody: SerializedBody, team: Team): Body => {
-    const [_, bodyTeam, blockId] = sBody.label.split('-');
-    const block = getBlockById(blockId, (bodyTeam as Team) || team);
-
-    const newBody = createBlockBody(blockId as BlockId, sBody.position.x, sBody.position.y, (bodyTeam as Team) || team);
-    if (!newBody) {
-      // Fallback for safety, though it should not happen if data is clean
-      return Matter.Bodies.rectangle(sBody.position.x, sBody.position.y, 80, 80);
-    }
-    
-    // IMPORTANT: Set the ID from the serialized data
-    newBody.id = sBody.id;
-    
-    Matter.Body.setAngle(newBody, sBody.angle);
-    Matter.Body.setVelocity(newBody, sBody.velocity);
-    Matter.Body.setAngularVelocity(newBody, sBody.angularVelocity);
-    
-    return newBody;
-};
-
   useEffect(() => {
-    if (!sceneRef.current) return;
-
-    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Events, Composite } = Matter;
+    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint } = Matter;
     const engine = Engine.create({ gravity: { y: 0.4 } });
     engineRef.current = engine;
     const world = engine.world;
-    const parentElement = sceneRef.current.parentElement!;
+    const parentElement = sceneRef.current!.parentElement!;
+    
     const render = Render.create({
-      element: sceneRef.current,
+      element: sceneRef.current!,
       engine: engine,
       options: {
         width: parentElement.clientWidth,
@@ -295,256 +213,80 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
       },
     });
     renderRef.current = render;
-    World.add(world, Bodies.rectangle(CANVAS_SIZE.width / 2, CANVAS_SIZE.height - 30, CANVAS_SIZE.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' }, collisionFilter: { category: 0b0100 } }));
 
-    
-    const zoneRenderProps = {
-      isStatic: true,
-      isSensor: true, // Make it non-collidable with other physics bodies
-      collisionFilter: { // Make it invisible to the mouse
-          group: -1,
-          category: 0,
-          mask: 0,
-        }
-    };
-  
-    const blueZoneBody = Bodies.rectangle(blueZoneBounds.min.x + (blueZoneBounds.max.x - blueZoneBounds.min.x) / 2, CANVAS_SIZE.height / 2, blueZoneWidth, CANVAS_SIZE.height, { ...zoneRenderProps, render: { fillStyle: 'rgba(0, 0, 255, 0.1)' } });
-    const redZoneBody = Bodies.rectangle(redZoneBounds.min.x + (redZoneBounds.max.x - redZoneBounds.min.x) / 2, CANVAS_SIZE.height / 2, CANVAS_SIZE.width * 0.2, CANVAS_SIZE.height, { ...zoneRenderProps, render: { fillStyle: 'rgba(255, 0, 0, 0.1)' } });
-    World.add(world, [blueZoneBody, redZoneBody]);
-    
-    // Real-time listener for canvas state
-    let unsubscribe: (() => void) | null = null;
-    if (user) {
-      const canvasDocRef = doc(db, 'canvasState', 'singleton');
-      unsubscribe = onSnapshot(canvasDocRef, (docSnap) => {
-          if (!docSnap.exists() || !engineRef.current) return;
-          if (mouseConstraintRef.current?.body) return;
-
-          const state = docSnap.data()?.state as SerializedCanvasState;
-          if (state) {
-              const currentWorld = engineRef.current.world;
-              const existingBodyIds = new Set(Composite.allBodies(currentWorld).map(b => b.id));
-
-              const bodiesToAdd = state.bodies
-                  .filter(sBody => !existingBodyIds.has(sBody.id))
-                  .map(sBody => deserializeBody(sBody, team));
-
-              if (bodiesToAdd.length > 0) {
-                  World.add(currentWorld, bodiesToAdd);
-              }
-
-              // Optional: Update positions for existing bodies, but be careful
-              state.bodies.forEach(sBody => {
-                const existingBody = Composite.allBodies(currentWorld).find(b => b.id === sBody.id);
-                if (existingBody && !Matter.Sleeping.isSleeping(existingBody)) {
-                   // Only update if it's not being interacted with locally, maybe?
-                   // This is complex logic. For now, let's just add new ones.
-                }
-              });
-
-              // Optional: Remove bodies that are no longer in the state
-              const stateBodyIds = new Set(state.bodies.map(b => b.id));
-              Composite.allBodies(currentWorld).forEach(body => {
-                  if (!body.isStatic && !stateBodyIds.has(body.id)) {
-                      World.remove(currentWorld, body);
-                  }
-              });
-          }
-      }, (error) => {
-        console.error("Firestore snapshot listener error:", error);
-      });
-    }
-    
-    // Save state periodically
-    const saveInterval = setInterval(saveCurrentState, 5000); // Save every 5 seconds
-
+    World.add(world, Bodies.rectangle(CANVAS_SIZE.width / 2, CANVAS_SIZE.height - 30, CANVAS_SIZE.width, 60, { isStatic: true, render: { fillStyle: '#2a2a2a' }}));
 
     const mouse = Mouse.create(render.canvas);
-    mouseRef.current = mouse;
     const mouseConstraint = MouseConstraint.create(engine, {
       mouse: mouse,
       constraint: { stiffness: 0.2, render: { visible: false } },
     });
     mouseConstraintRef.current = mouseConstraint;
     World.add(world, mouseConstraint);
-    render.mouse = mouse;
+    
     Render.run(render);
     const runner = Runner.create();
     Runner.run(runner, engine);
     updateCamera();
 
-    
-    Events.on(mouseConstraint, 'mousedown', (event) => {
-        const mc = mouseConstraintRef.current;
-        if (!mc || !mc.body) return;
-
-        const draggedBody: CustomBody = mc.body;
-        const [_, bodyTeam] = draggedBody.label.split('-');
-
-        // Enforce team-based dragging
-        if (bodyTeam !== team) {
-            mc.constraint.bodyB = null; // Prevent dragging
-            return;
-        }
-
-        // Handle zone restrictions for dragging
-        if (apiRef.current) {
-            const { blueZone, redZone } = apiRef.current.getZones();
-            if (team === 'blue' && draggedBody.position.x > blueZone.max.x) {
-            // Let it go if it's already in no-mans-land
-            } else if (team === 'red' && draggedBody.position.x < redZone.min.x) {
-                // Let it go if it's already in no-mans-land
-            }
-        }
-        
-
-        if (draggedBody.initialOverlapWhitelist === undefined) {
-            draggedBody.initialOverlapWhitelist = new Set<number>();
-            const allOtherBodies = Composite.allBodies(engine.world).filter(
-                (body: Body) => body.id !== draggedBody.id && !body.isStatic
-            );
-            allOtherBodies.forEach(otherBody => {
-                const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
-                const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
-                const fictiveBounds = {
-                    min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
-                    max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
-                };
-                if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
-                  draggedBody.initialOverlapWhitelist!.add(otherBody.id);
-                }
-            });
-        }
-    });
-
-
-    Events.on(engine, 'beforeUpdate', () => {
-      const mc = mouseConstraintRef.current;
-      if (!mc || !mc.body) return;
-
-      const draggedBody: CustomBody = mc.body;
-      
-      // Prevent dragging into invalid zones
-      if(apiRef.current) {
-        const { blueZone, redZone } = apiRef.current.getZones();
-        const currentTeam = team;
-        const bodyPos = draggedBody.position;
-        
-        if (currentTeam === 'blue' && bodyPos.x > redZone.min.x) {
-            mc.constraint.bodyB = null;
-            return;
-        }
-        if (currentTeam === 'red' && bodyPos.x < blueZone.max.x) {
-            mc.constraint.bodyB = null;
-            return;
-        }
-      }
-
-      if (draggedBody.initialOverlapWhitelist === undefined) return;
-
-      const allOtherBodies = Composite.allBodies(engine.world).filter(
-        (body: Body) => body.id !== draggedBody.id && !body.isStatic
-      );
-
-      for (const otherBody of allOtherBodies) {
-        if (draggedBody.initialOverlapWhitelist.has(otherBody.id)) continue;
-        const bodyWidth = otherBody.bounds.max.x - otherBody.bounds.min.x;
-        const bodyHeight = otherBody.bounds.max.y - otherBody.bounds.min.y;
-        const fictiveBounds = {
-          min: { x: otherBody.position.x - bodyWidth, y: otherBody.position.y - bodyHeight },
-          max: { x: otherBody.position.x + bodyWidth, y: otherBody.position.y + bodyHeight }
-        };
-        if (Bounds.overlaps(draggedBody.bounds, fictiveBounds)) {
-          if (mc.constraint) {
-            mc.constraint.bodyB = null;
-          }
-          break;
-        }
-      }
-    });
-
     const handleResize = () => {
       if (renderRef.current && sceneRef.current?.parentElement) {
         renderRef.current.canvas.width = sceneRef.current.parentElement.clientWidth;
         renderRef.current.canvas.height = sceneRef.current.parentElement.clientHeight;
-        renderRef.current.options.width = sceneRef.current.parentElement.clientWidth;
-        renderRef.current.options.height = sceneRef.current.parentElement.clientHeight;
         updateCamera();
       }
     };
     window.addEventListener('resize', handleResize);
 
     return () => {
-      if (unsubscribe) unsubscribe(); // Stop listening to real-time updates
-      clearInterval(saveInterval);
       window.removeEventListener('resize', handleResize);
       Render.stop(render);
       Runner.stop(runner);
       World.clear(world, false);
       Engine.clear(engine);
       if (render.canvas) render.canvas.remove();
-      if (render.textures) render.textures = {};
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, []);
+
+  useEffect(() => {
+    const starsCanvas = starsCanvasRef.current;
+    if (!starsCanvas) return;
+    starsCanvas.width = CANVAS_SIZE.width;
+    starsCanvas.height = CANVAS_SIZE.height;
+    const ctx = starsCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.fillStyle = 'white';
+    for (let i = 0; i < 20000; i++) {
+      const x = Math.random() * CANVAS_SIZE.width;
+      const y = Math.random() * CANVAS_SIZE.height;
+      const radius = Math.random() * 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, []);
 
   useEffect(() => {
     updateCamera();
   }, [zoom]);
 
-  useEffect(() => {
-    const mc = mouseConstraintRef.current;
-    if (!mc) return;
-
-    const teamCategory = team === 'red' ? 0b0001 : 0b0010;
-    mc.collisionFilter.mask = teamCategory;
-  }, [team]);
-
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     if (e.button !== 0) return;
+    const mc = mouseConstraintRef.current;
+    // Allow panning only if not dragging a block
     if (e.ctrlKey) {
-      dragModeRef.current = 'zooming';
-      zoomStartRef.current = { y: e.clientY, zoom };
-      return;
-    }
-    setTimeout(() => {
-      const mc = mouseConstraintRef.current;
-      if (mc && mc.body) {
-        dragModeRef.current = 'none';
-        return;
-      }
-      dragModeRef.current = 'panning';
-      lastMousePosition.current = { x: e.clientX, y: e.clientY };
-    }, 0);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      const mc = mouseConstraintRef.current;
-      if (!mc?.body) {
+        dragModeRef.current = 'zooming';
+        zoomStartRef.current = { y: e.clientY, zoom };
+    } else if (!mc || !mc.body) {
         dragModeRef.current = 'panning';
-        const touch = e.touches[0];
-        lastTouchPosition.current = { x: touch.clientX, y: touch.clientY };
-      }
-    } else if (e.touches.length === 2) {
-      dragModeRef.current = 'zooming';
-      const [t1, t2] = [e.touches[0], e.touches[1]];
-      const dx = t2.clientX - t1.clientX;
-      const dy = t2.clientY - t1.clientY;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      pinchZoomStartRef.current = { distance, zoom };
+        lastMousePosition.current = { x: e.clientX, y: e.clientY };
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     e.preventDefault();
     if (dragModeRef.current === 'panning') {
-      const mc = mouseConstraintRef.current;
-      if (mc && mc.body) {
-        dragModeRef.current = 'none';
-        return;
-      }
       const dx = e.clientX - lastMousePosition.current.x;
       const dy = e.clientY - lastMousePosition.current.y;
       viewCenter.current.x -= dx / zoom;
@@ -554,33 +296,7 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
     } else if (dragModeRef.current === 'zooming') {
       const dy = e.clientY - zoomStartRef.current.y;
       const zoomFactor = Math.pow(1.005, -dy);
-      const newZoom = Math.max(0.02, Math.min(2, zoomStartRef.current.zoom * zoomFactor));
-      setZoom(newZoom);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    e.preventDefault();
-    const mc = mouseConstraintRef.current;
-    if (dragModeRef.current === 'panning' && e.touches.length === 1 && !mc?.body) {
-      const touch = e.touches[0];
-      const dx = touch.clientX - lastTouchPosition.current.x;
-      const dy = touch.clientY - lastTouchPosition.current.y;
-      viewCenter.current.x -= dx / zoom;
-      viewCenter.current.y -= dy / zoom;
-      lastTouchPosition.current = { x: touch.clientX, y: touch.clientY };
-      updateCamera();
-    } else if (dragModeRef.current === 'zooming' && e.touches.length === 2) {
-      const [t1, t2] = [e.touches[0], e.touches[1]];
-      const dx = t2.clientX - t1.clientX;
-      const dy = t2.clientY - t1.clientY;
-      const newDistance = Math.sqrt(dx * dx + dy * dy);
-      if (pinchZoomStartRef.current) {
-        const { distance: startDistance, zoom: startZoom } = pinchZoomStartRef.current;
-        const zoomFactor = newDistance / startDistance;
-        const newZoom = Math.max(0.02, Math.min(2, startZoom * zoomFactor));
-        setZoom(newZoom);
-      }
+      setZoom(prevZoom => Math.max(0.02, Math.min(2, prevZoom * zoomFactor)));
     }
   };
 
@@ -589,24 +305,11 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
     dragModeRef.current = 'none';
   };
 
-  const handleMouseLeave = () => {
-    dragModeRef.current = 'none';
-  };
-
-  const handleTouchEnd = () => {
-    if ((dragModeRef.current === 'panning' || dragModeRef.current === 'zooming')) {
-      dragModeRef.current = 'none';
-      pinchZoomStartRef.current = null;
-    }
-  };
-
   const getCursor = () => {
     if (dragModeRef.current === 'panning') return 'grabbing';
     if (dragModeRef.current === 'zooming') return 'ns-resize';
     const mc = mouseConstraintRef.current;
-    if (mc && mc.body) {
-      return 'grabbing';
-    }
+    if (mc && mc.body) return 'grabbing';
     return 'grab';
   };
 
@@ -623,13 +326,8 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      onMouseLeave={() => dragModeRef.current = 'none'}
       onContextMenu={(e) => e.preventDefault()}
-      onWheel={(e) => { e.preventDefault(); }}
     >
       <canvas
         ref={starsCanvasRef}
@@ -650,7 +348,6 @@ const TetrisCanvas = forwardRef<TetrisCanvasApi, TetrisCanvasProps>(({ user, tea
 });
 
 TetrisCanvas.displayName = 'TetrisCanvas';
-
 export default TetrisCanvas;
 
     
