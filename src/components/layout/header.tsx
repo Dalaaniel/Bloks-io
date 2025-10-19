@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Shapes, LogIn, LogOut, User } from 'lucide-react';
+import { Shapes, LogIn, LogOut, User as UserIcon, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/auth-context';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -16,6 +16,31 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
+import { ref, onValue, query, orderByChild, equalTo } from 'firebase/database';
+import { rtdb } from '@/lib/firebase';
+
+const PlayerCount = () => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const statusRef = ref(rtdb, 'status');
+    const onlineQuery = query(statusRef, orderByChild('state'), equalTo('online'));
+
+    const unsubscribe = onValue(onlineQuery, (snapshot) => {
+      setCount(snapshot.size);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Users className="h-4 w-4" />
+      <span>{count} Joueur{count > 1 ? 's' : ''} en ligne</span>
+    </div>
+  );
+};
 
 
 export default function Header() {
@@ -42,6 +67,8 @@ export default function Header() {
         </nav>
         
         <div className="flex items-center gap-4">
+          <PlayerCount />
+
           {user && (
             <Badge 
               className={cn(
@@ -62,7 +89,7 @@ export default function Header() {
                   <Avatar className="h-10 w-10">
                     <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'User'} />
                     <AvatarFallback>
-                      <User />
+                      <UserIcon />
                     </AvatarFallback>
                   </Avatar>
                 </Button>
