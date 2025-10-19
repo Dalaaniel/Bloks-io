@@ -10,10 +10,12 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { signUp, signIn } from '@/services/auth-service';
+import { useAuth } from '@/context/auth-context';
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { fetchPlayerCount } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,12 +25,14 @@ export default function LoginPage() {
     try {
       if (action === 'signUp') {
         await signUp(email, password);
+        await fetchPlayerCount();
         toast({
           title: 'Sign Up Successful',
           description: "You're now logged in.",
         });
       } else {
         await signIn(email, password);
+        await fetchPlayerCount();
         toast({
           title: 'Login Successful',
           description: "Welcome back!",

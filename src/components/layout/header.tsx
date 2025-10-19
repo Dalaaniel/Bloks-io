@@ -16,34 +16,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 
 const PlayerCount = () => {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    const counterDocRef = doc(db, 'onlineCounter', 'singleton');
-
-    const unsubscribe = onSnapshot(counterDocRef, (doc) => {
-      if (doc.exists()) {
-        setCount(doc.data().count);
-      } else {
-        setCount(0);
-      }
-    }, (error) => {
-      console.error("Error fetching online count:", error);
-      setCount(0);
-    });
-
-    return () => unsubscribe();
-  }, []);
+  const { playerCount } = useAuth();
 
   return (
     <div className="flex items-center gap-2 text-sm text-muted-foreground">
       <Users className="h-4 w-4" />
-      <span>{count} Joueur{count > 1 ? 's' : ''} en ligne</span>
+      <span>{playerCount} Joueur{playerCount > 1 ? 's' : ''} en ligne</span>
     </div>
   );
 };

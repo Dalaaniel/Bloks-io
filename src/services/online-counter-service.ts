@@ -1,3 +1,4 @@
+
 'use client';
 
 import { doc, runTransaction, getDoc } from 'firebase/firestore';
@@ -14,7 +15,10 @@ const initializeCounter = async () => {
     if (!docSnap.exists()) {
         try {
             await runTransaction(db, async (transaction) => {
-                transaction.set(counterDocRef, { count: 0 });
+                const docInTransaction = await transaction.get(counterDocRef);
+                if (!docInTransaction.exists()) {
+                    transaction.set(counterDocRef, { count: 0 });
+                }
             });
         } catch (e) {
             console.error("Could not initialize online counter:", e);
@@ -23,7 +27,6 @@ const initializeCounter = async () => {
 };
 
 initializeCounter();
-
 
 export const incrementOnlineUsers = async (): Promise<void> => {
     try {
@@ -55,5 +58,18 @@ export const decrementOnlineUsers = async (): Promise<void> => {
         });
     } catch (e) {
         console.error("Transaction failed: ", e);
+    }
+};
+
+export const getOnlineUsersCount = async (): Promise<number> => {
+    try {
+        const docSnap = await getDoc(counterDocRef);
+        if (docSnap.exists()) {
+            return docSnap.data().count || 0;
+        }
+        return 0;
+    } catch (error) {
+        console.error("Error fetching online count:", error);
+        return 0;
     }
 };

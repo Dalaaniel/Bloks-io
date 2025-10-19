@@ -1,13 +1,13 @@
 
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { type UserProfile } from '@/services/auth-service';
 import { useRouter } from 'next/navigation';
-import { decrementOnlineUsers } from '@/services/online-counter-service';
+import { decrementOnlineUsers, getOnlineUsersCount } from '@/services/online-counter-service';
 
 
 export interface User extends FirebaseUser, UserProfile {}
@@ -16,6 +16,8 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  playerCount: number;
+  fetchPlayerCount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,7 +25,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [playerCount, setPlayerCount] = useState(0);
   const router = useRouter();
+
+  const fetchPlayerCount = useCallback(async () => {
+    const count = await getOnlineUsersCount();
+    setPlayerCount(count);
+  }, []);
+
+  useEffect(() => {
+    fetchPlayerCount();
+  }, [fetchPlayerCount]);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
@@ -66,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       await decrementOnlineUsers();
+      await fetchPlayerCount();
       await auth.signOut();
       setUser(null);
       router.push('/login');
@@ -78,6 +91,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     loading,
     signOut,
+    playerCount,
+    fetchPlayerCount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
