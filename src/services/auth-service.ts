@@ -9,6 +9,7 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { type Team, type BlockId } from '@/lib/blocks';
+import { updateUserPresence } from './presence-service';
 
 export type UserInventory = { [key in BlockId]: number };
 
@@ -39,11 +40,15 @@ export async function signUp(email: string, password: string): Promise<UserCrede
   };
 
   await setDoc(doc(db, 'users', user.uid), userProfile);
+  updateUserPresence(user.uid);
   return userCredential;
 }
 
 export async function signIn(email: string, password: string): Promise<UserCredential> {
-  return signInWithEmailAndPassword(auth, email, password);
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  const { user } = userCredential;
+  updateUserPresence(user.uid);
+  return userCredential;
 }
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
