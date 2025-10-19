@@ -10,7 +10,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { signUp, signIn } from '@/services/auth-service';
-import { type Team } from '@/lib/blocks';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,8 +22,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       if (action === 'signUp') {
-        const team: Team = Math.random() > 0.5 ? 'red' : 'blue';
-        await signUp(email, password, team);
+        await signUp(email, password);
         toast({
           title: 'Sign Up Successful',
           description: "You're now logged in.",

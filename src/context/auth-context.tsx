@@ -3,11 +3,11 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
+import { auth, db, rtdb } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { type UserProfile } from '@/services/auth-service';
 import { useRouter } from 'next/navigation';
-import { updateUserPresence, disconnectUserPresence } from '@/services/presence-service';
+import { ref, set, onValue, onDisconnect, serverTimestamp, goOffline, goOnline } from 'firebase/database';
 
 export interface User extends FirebaseUser, UserProfile {}
 
@@ -25,16 +25,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
-        // User is signed in, now listen for profile changes
+        // User is signed in
+        const userStatusDatabaseRef = ref(rtdb, '/status/' + firebaseUser.uid);
+        const isOfflineForDatabase = { state: 'offline', last_changed: serverTimestamp() };
+        const isOnlineForDatabase = { state: 'online', last_changed: serverTimestamp() };
+        
+        const connectedRef = ref(rtdb, '.info/connected');
+        onValue(connectedRef, (snapshot) => {
+          if (snapshot.val() === false) {
+            return;
+          }
+          onDisconnect(userStatusDatabaseRef).set(isOfflineForDatabase).then(() => {
+            set(userStatusDatabaseRef, isOnlineForDatabase);
+          });
+        });
+
+        // Listen for profile changes
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const unsubscribeProfile = onSnapshot(userDocRef, (doc) => {
           if (doc.exists()) {
             const userProfile = doc.data() as UserProfile;
             const fullUser = { ...firebaseUser, ...userProfile };
             setUser(fullUser);
-            updateUserPresence(fullUser); // Set user presence to online
           } else {
             console.warn(`No user profile found for UID: ${firebaseUser.uid}`);
             setUser(null);
@@ -46,38 +60,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
            setLoading(false);
         });
 
-        // Return a cleanup function for the profile listener
-        return () => unsubscribeProfile();
+        return () => {
+          unsubscribeProfile();
+          goOffline(rtdb);
+        };
 
       } else {
         // User is signed out
-        if (user) { // If there was a user before, mark them as offline
-            disconnectUserPresence();
+        if (user) {
+          const userStatusDatabaseRef = ref(rtdb, '/status/' + user.uid);
+          set(userStatusDatabaseRef, { state: 'offline', last_changed: serverTimestamp() });
         }
         setUser(null);
         setLoading(false);
       }
     });
 
-    // Handle user disconnecting (e.g. closing tab)
-    const handleBeforeUnload = () => {
-      if (auth.currentUser) {
-        disconnectUserPresence();
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    // Return a cleanup function for the auth state listener
     return () => {
       unsubscribeAuth();
-      window.removeEventListener('beforeunload', handleBeforeUnload);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signOut = async () => {
     try {
-      disconnectUserPresence(); // Mark user as offline before signing out
+      if (auth.currentUser) {
+        const userStatusDatabaseRef = ref(rtdb, '/status/' + auth.currentUser.uid);
+        set(userStatusDatabaseRef, { state: 'offline', last_changed: serverTimestamp() });
+      }
+      goOffline(rtdb);
       await auth.signOut();
       setUser(null);
       router.push('/login');
