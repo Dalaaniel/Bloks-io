@@ -17,18 +17,24 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { ref, onValue, query, orderByChild, equalTo } from 'firebase/database';
-import { rtdb } from '@/lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const PlayerCount = () => {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
-    const statusRef = ref(rtdb, 'status');
-    const onlineQuery = query(statusRef, orderByChild('state'), equalTo('online'));
+    const counterDocRef = doc(db, 'onlineCounter', 'singleton');
 
-    const unsubscribe = onValue(onlineQuery, (snapshot) => {
-      setCount(snapshot.size);
+    const unsubscribe = onSnapshot(counterDocRef, (doc) => {
+      if (doc.exists()) {
+        setCount(doc.data().count);
+      } else {
+        setCount(0);
+      }
+    }, (error) => {
+      console.error("Error fetching online count:", error);
+      setCount(0);
     });
 
     return () => unsubscribe();

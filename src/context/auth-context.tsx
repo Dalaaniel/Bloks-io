@@ -7,7 +7,7 @@ import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { type UserProfile } from '@/services/auth-service';
 import { useRouter } from 'next/navigation';
-import { disconnectUserPresence } from '@/services/presence-service';
+import { decrementOnlineUsers } from '@/services/online-counter-service';
 
 
 export interface User extends FirebaseUser, UserProfile {}
@@ -65,9 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      if (auth.currentUser) {
-        disconnectUserPresence(auth.currentUser.uid);
-      }
+      await decrementOnlineUsers();
       await auth.signOut();
       setUser(null);
       router.push('/login');

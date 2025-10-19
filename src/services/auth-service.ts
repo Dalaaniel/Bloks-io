@@ -9,7 +9,7 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { type Team, type BlockId } from '@/lib/blocks';
-import { updateUserPresence } from './presence-service';
+import { incrementOnlineUsers } from './online-counter-service';
 
 export type UserInventory = { [key in BlockId]: number };
 
@@ -40,14 +40,13 @@ export async function signUp(email: string, password: string): Promise<UserCrede
   };
 
   await setDoc(doc(db, 'users', user.uid), userProfile);
-  updateUserPresence(user.uid);
+  await incrementOnlineUsers();
   return userCredential;
 }
 
 export async function signIn(email: string, password: string): Promise<UserCredential> {
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
-  const { user } = userCredential;
-  updateUserPresence(user.uid);
+  await incrementOnlineUsers();
   return userCredential;
 }
 
