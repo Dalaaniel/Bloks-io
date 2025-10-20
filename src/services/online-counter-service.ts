@@ -1,7 +1,6 @@
-
 'use client';
 
-import { doc, runTransaction, getDoc } from 'firebase/firestore';
+import { doc, runTransaction, getDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 const COUNTER_COLLECTION = 'onlineCounter';
@@ -17,7 +16,7 @@ const initializeCounter = async () => {
             await runTransaction(db, async (transaction) => {
                 const docInTransaction = await transaction.get(counterDocRef);
                 if (!docInTransaction.exists()) {
-                    transaction.set(counterDocRef, { count: 0 });
+                    transaction.set(counterDocRef, { onlineUsers: [] });
                 }
             });
         } catch (e) {
@@ -28,36 +27,35 @@ const initializeCounter = async () => {
 
 initializeCounter();
 
-export const incrementOnlineUsers = async (): Promise<void> => {
+export const incrementOnlineUsers = async (uid: string): Promise<void> => {
     try {
         await runTransaction(db, async (transaction) => {
             const counterDoc = await transaction.get(counterDocRef);
             if (!counterDoc.exists()) {
-                transaction.set(counterDocRef, { count: 1 });
+                transaction.set(counterDocRef, { onlineUsers: [uid] });
                 return;
             }
-            const newCount = (counterDoc.data().count || 0) + 1;
-            transaction.update(counterDocRef, { count: newCount });
+            // Use arrayUnion to safely add the UID if it doesn't exist
+            transaction.update(counterDocRef, { onlineUsers: arrayUnion(uid) });
         });
     } catch (e) {
-        console.error("Transaction failed: ", e);
+        console.error("Transaction failed (increment): ", e);
     }
 };
 
 
-export const decrementOnlineUsers = async (): Promise<void> => {
+export const decrementOnlineUsers = async (uid: string): Promise<void> => {
     try {
         await runTransaction(db, async (transaction) => {
             const counterDoc = await transaction.get(counterDocRef);
             if (!counterDoc.exists()) {
-                transaction.set(counterDocRef, { count: 0 });
                 return;
             }
-            const newCount = Math.max(0, (counterDoc.data().count || 0) - 1);
-            transaction.update(counterDocRef, { count: newCount });
+            // Use arrayRemove to safely remove the UID
+            transaction.update(counterDocRef, { onlineUsers: arrayRemove(uid) });
         });
     } catch (e) {
-        console.error("Transaction failed: ", e);
+        console.error("Transaction failed (decrement): ", e);
     }
 };
 
@@ -65,7 +63,8 @@ export const getOnlineUsersCount = async (): Promise<number> => {
     try {
         const docSnap = await getDoc(counterDocRef);
         if (docSnap.exists()) {
-            return docSnap.data().count || 0;
+            const data = docSnap.data();
+            return data.onlineUsers?.length || 0;
         }
         return 0;
     } catch (error) {

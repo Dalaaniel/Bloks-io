@@ -35,6 +35,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     fetchPlayerCount();
+    // Set up an interval to refresh the count periodically,
+    // to catch cases where other users connect/disconnect.
+    const interval = setInterval(fetchPlayerCount, 5000); // Refresh every 5 seconds
+    return () => clearInterval(interval);
   }, [fetchPlayerCount]);
 
   useEffect(() => {
@@ -69,15 +73,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // Cleanup function for when the AuthProvider unmounts
     return () => {
+      if (auth.currentUser) {
+        // This is a failsafe for when the component unmounts, e.g., navigating away
+        // Note: this won't cover all cases like browser close
+        decrementOnlineUsers(auth.currentUser.uid);
+      }
       unsubscribeAuth();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signOut = async () => {
+    if (!user) return;
     try {
-      await decrementOnlineUsers();
+      await decrementOnlineUsers(user.uid);
       await fetchPlayerCount();
       await auth.signOut();
       setUser(null);

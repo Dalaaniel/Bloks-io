@@ -23,7 +23,7 @@ const PlayerCount = () => {
   return (
     <div className="flex items-center gap-2 text-sm text-muted-foreground">
       <Users className="h-4 w-4" />
-      <span>{playerCount} Joueur{playerCount > 1 ? 's' : ''} en ligne</span>
+      <span>{playerCount} Joueur{playerCount !== 1 ? 's' : ''} en ligne</span>
     </div>
   );
 };

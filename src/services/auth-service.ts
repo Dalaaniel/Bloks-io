@@ -40,13 +40,14 @@ export async function signUp(email: string, password: string): Promise<UserCrede
   };
 
   await setDoc(doc(db, 'users', user.uid), userProfile);
-  await incrementOnlineUsers();
+  await incrementOnlineUsers(user.uid);
   return userCredential;
 }
 
 export async function signIn(email: string, password: string): Promise<UserCredential> {
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
-  await incrementOnlineUsers();
+  const { user } = userCredential;
+  await incrementOnlineUsers(user.uid);
   return userCredential;
 }
 
